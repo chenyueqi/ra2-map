@@ -1,0 +1,64 @@
+"""Isometric overview render of the generated map (for checking, not used by the game)."""
+import json
+import os
+import sys
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+import tileset
+
+OUT = os.path.join(os.path.dirname(__file__), 'out')
+S = int(sys.argv[1]) if len(sys.argv) > 1 else 8          # half cell width in pixels
+st = np.load(os.path.join(OUT, 'state.npz'))
+obj = json.load(open(os.path.join(OUT, 'objects.json')))
+TS = tileset.load()
+h, level, tile, overlay, valid = st['heights'], st['level'], st['tile'], st['overlay'], st['valid']
+W, H = 100, 154
+LX, LY, LW, LH = 2, 4, 96, 141
+X0, X1, Y0, Y1 = -(W - 2 * LX), 2 * (LX + LW) - W, W + 2 * LY, W + 2 * (LY + LH + 1)
+
+
+def pt(cx, cy):
+    return (cx - cy - X0) * S, (cx + cy - Y0) * S / 2 - h[cx, cy] * S / 2 + 6 * S
+
+
+img = Image.new('RGB', ((X1 - X0) * S, int((Y1 - Y0) * S / 2 + 8 * S)), (20, 20, 24))
+d = ImageDraw.Draw(img)
+cells = sorted(zip(*np.nonzero(valid)), key=lambda c: (c[0] + c[1], c[0]))
+for rx, ry in cells:
+    t = int(tile[rx, ry])
+    col = np.array([int(TS[t]['tiles'][0]['color'][i:i + 2], 16) for i in (0, 2, 4)], float)
+    c = [h[rx, ry], h[rx + 1, ry], h[rx + 1, ry + 1], h[rx, ry + 1]]
+    shade = 1.0 + 0.16 * ((c[2] + c[1]) - (c[0] + c[3])) + 0.025 * level[rx, ry]
+    if overlay[rx, ry] != 255:
+        col = np.array([140, 122, 230.]) if overlay[rx, ry] < 100 else np.array([222, 180, 50.])
+    col = tuple(int(v) for v in np.clip(col * shade, 0, 255))
+    poly = [pt(rx, ry), pt(rx + 1, ry), pt(rx + 1, ry + 1), pt(rx, ry + 1)]
+    d.polygon(poly, fill=col)
+for k, name in obj['terrain'].items():
+    k = int(k)
+    rx, ry = k % 1000, k // 1000
+    x, y = pt(rx + 0.5 if False else rx, ry)
+    x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
+    col = (34, 70, 30) if name.startswith('TREE') else (230, 120, 20)
+    d.ellipse([x - S * 0.55, y - S * 0.9, x + S * 0.55, y + S * 0.2], fill=col)
+for s in obj['structures']:
+    f = s.split(',')
+    rx, ry = int(f[3]), int(f[4])
+    x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
+    d.rectangle([x - S, y - S, x + S * 2, y + S], fill=(90, 90, 100), outline=(255, 255, 255))
+try:
+    font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', max(12, int(S * 1.6)))
+except OSError:
+    font = ImageFont.load_default()
+colors = [(220, 40, 40), (40, 110, 230), (240, 200, 30), (40, 180, 60), (240, 130, 20), (150, 60, 200),
+          (40, 200, 200), (230, 90, 170)]
+for i, ((rx, ry), name) in enumerate(zip(obj['starts'], obj['names'])):
+    x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
+    r = S * 1.6
+    d.ellipse([x - r, y - r, x + r, y + r], fill=colors[i], outline=(255, 255, 255), width=2)
+    d.text((x + r + 4, y - r), f'{i + 1} {name}', fill=(255, 255, 255), font=font, stroke_width=2,
+           stroke_fill=(0, 0, 0))
+img.save(os.path.join(OUT, f'render_{S}.png'))
+print(img.size)
