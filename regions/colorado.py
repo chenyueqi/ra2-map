@@ -28,19 +28,18 @@ MAP_CENTER = (-105.55, 39.0)
 ORE_TOWNS = [('Limon', -103.69, 39.26), ('Fort Morgan', -103.80, 40.25), ('La Junta', -103.54, 37.98),
              ('Walsenburg', -104.78, 37.62), ('Montrose', -107.88, 38.48), ('Meeker', -107.91, 40.04),
              ('Granby', -105.94, 40.09), ('Salida', -106.00, 38.53), ('Cortez', -108.59, 37.35),
-             ('Trinidad', -104.50, 37.17), ('Burlington', -102.40, 39.30), ('Pueblo', -104.61, 38.27),
-             ('Gunnison', -106.93, 38.55), ('Craig', -107.55, 40.52), ('Fort Collins', -105.08, 40.58),
+             ('Trinidad', -104.50, 37.17), ('Burlington', -102.40, 39.30), ('Pueblo east', -104.45, 38.30),
+             ('Gunnison', -106.93, 38.55), ('Craig', -107.55, 40.52), ('Fort Collins east', -104.93, 40.62),
              ('Kremmling', -106.39, 40.06), ('Glenwood Springs', -107.32, 39.55)]
 GEM_TOWNS = [('Leadville', -106.29, 39.25), ('Cripple Creek', -105.18, 38.75), ('Silverton', -107.66, 37.81),
              ('Central City', -105.51, 39.80), ('Telluride', -107.81, 37.94)]
-ORE_DRILLS = GEM_TOWNS[:2]
 OIL = [('Greeley', -104.70, 40.42), ('Wattenberg', -104.85, 40.17), ('Rangely', -108.80, 40.09),
        ('Rifle', -107.78, 39.53), ('Trinidad field', -104.30, 37.30), ('Aneth', -108.85, 37.30),
        ('Akron', -103.21, 40.16), ('Kit Carson', -102.79, 38.76)]
 TECH = [('CAAIRP', 'Denver International Airport', -104.67, 39.86, 3, 3),
-        ('CAHOSP', 'Denver Health', -104.99, 39.73, 6, 4),
+        ('CAHOSP', 'Anschutz Medical Campus', -104.83, 39.745, 6, 4),
         ('CAOUTP', 'Pueblo Chemical Depot', -104.33, 38.32, 4, 3)]
-CITIES = [('Denver', -104.99, 39.74, 5.5), ('Boulder', -105.13, 40.03, 3.5), ('Colorado Springs', -104.72, 38.86, 4),
+CITIES = [('Denver', -104.97, 39.73, 6.5), ('Boulder', -105.13, 40.03, 3.5), ('Colorado Springs', -104.72, 38.86, 4),
           ('Fort Collins', -105.08, 40.58, 2.5), ('Pueblo', -104.61, 38.27, 2.5), ('Greeley', -104.70, 40.42, 2),
           ('Grand Junction', -108.42, 39.10, 3), ('Durango', -107.86, 37.33, 2.5), ('Alamosa', -105.87, 37.50, 2.5),
           ('Sterling', -103.21, 40.58, 2.5), ('Lamar', -102.80, 38.12, 2.5), ('Steamboat Springs', -106.88, 40.50, 2.5)]
@@ -95,3 +94,33 @@ def ground_cover(g):
     p[p == 0] = 0.006
     mountain = forest | (E > 2300)
     return cover, mountain, p
+
+# --- buildings ---------------------------------------------------------------------------
+from regions.pools import POOLS as CIVILIAN_POOLS   # noqa: E402
+
+LANDMARKS = [('CACOLO01', 'Air Force Academy Chapel', -104.89, 39.008, 5, 3),
+             ('CATECH01', 'NORAD Cheyenne Mountain', -104.85, 38.744, 3, 3)]
+CIVILIAN_START_CLEAR = 11
+FLAT_CITIES = [('Denver', -104.97, 39.73, 7), ('Fort Collins', -105.08, 40.58, 3), ('Pueblo', -104.61, 38.27, 3),
+               ('Greeley', -104.70, 40.42, 2.5)]
+PROP_DENSITY = 0.3
+CIVILIAN_ZONES = [  # lon, lat, radius (cells), pool, density
+    (-104.99, 39.745, 3, 'highrise', 0.9),      # downtown Denver
+    (-104.95, 39.70, 6, 'small', 0.8),           # Denver neighbourhoods
+    (-104.85, 39.80, 4, 'industrial', 0.5),      # Commerce City
+    (-104.61, 38.26, 3, 'industrial', 0.7),      # Pueblo steel mill
+    (-105.08, 40.58, 3, 'small', 0.8),           # Fort Collins
+    (-104.80, 38.84, 4, 'suburb', 0.4),          # Colorado Springs
+    (-106.82, 39.19, 2.5, 'small', 0.9),         # Aspen
+    (-106.37, 39.64, 2.5, 'small', 0.9),         # Vail
+    (-106.04, 39.48, 2.5, 'small', 0.9),         # Breckenridge
+    (-108.07, 38.74, 3, 'farm', 0.3),            # Delta
+    (-104.70, 40.42, 4, 'farm', 0.3),            # Greeley
+    (-103.50, 40.40, 6, 'farm', 0.2),            # eastern plains
+    (-102.60, 39.70, 6, 'farm', 0.2),
+    (-103.00, 38.90, 6, 'farm', 0.2),
+    (-103.90, 38.60, 5, 'farm', 0.2),
+    (-104.30, 39.60, 5, 'farm', 0.2),
+    (-105.90, 37.75, 5, 'farm', 0.2),            # San Luis Valley potato farms
+]
+CIVILIAN_FILL = ('small', 0.8)   # at ~3 km per cell only small houses fit a town

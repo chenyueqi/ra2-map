@@ -32,7 +32,6 @@ ORE_TOWNS = [('San Bruno Mountain', -122.43, 37.685), ('Belmont hills', -122.31,
              ('Danville', -121.99, 37.82), ('Cupertino', -122.03, 37.32)]
 GEM_TOWNS = [('Mount Diablo', -121.92, 37.87), ('Mount Tamalpais', -122.59, 37.92),
              ('San Rafael', -122.53, 37.98), ('Sausalito', -122.49, 37.87)]
-ORE_DRILLS = [GEM_TOWNS[0]]
 OIL = [('Richmond refinery', -122.38, 37.945), ('Rodeo refinery', -122.26, 38.03),
        ('Martinez refinery', -122.11, 38.01), ('Hunters Point', -122.375, 37.725),
        ('Moffett Field', -122.05, 37.41), ('Alcatraz', -122.423, 37.827)]

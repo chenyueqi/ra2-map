@@ -283,6 +283,8 @@ for _, _, lon, lat, w, h in cfg.TECH:
     lock_disc(lon, lat, max(w, h) + 1.5)
 for _, _, lon, lat, w, h in getattr(cfg, 'LANDMARKS', []):
     lock_disc(lon, lat, max(w, h) + 1.5)
+for _, lon, lat, r in getattr(cfg, 'FLAT_CITIES', []):    # real cities sit on level ground
+    lock_disc(lon, lat, r)
 
 upper = relax_min(np.where(np.isnan(lock), np.inf, lock))
 lower = -relax_min(np.where(np.isnan(lock), np.inf, -lock))
@@ -379,8 +381,13 @@ def blob(cx, cy, r):
     return d <= 1
 
 
+fields = []                              # (center x, center y, kind) of every resource field
+
+
 def place_field(cx, cy, r, kind):
     m = blob(cx, cy, r) & flat & ~taken & VALID & ~water_cell
+    if m.any():
+        fields.append((cx, cy, kind))
     if kind == 'ore':
         overlay[m] = np.where(rng.random(m.sum()) < 0.85, ORE, ORE_B)
     else:
@@ -448,6 +455,7 @@ for kind, _, lon, lat, w, h in getattr(cfg, 'LANDMARKS', []):
 
 # --- civilian buildings: city blocks with streets between them -------------------------------
 props = {}
+civ_stats = []                                       # (zone, candidate cells, buildings placed)
 GAP = {'farm': 4, 'suburb': 2, 'campus': 2}         # street width around a building (cells)
 
 
@@ -509,9 +517,24 @@ if getattr(cfg, 'CIVILIAN_ZONES', None):
         zx, zy = to_iso(lon, lat)
         cand = [(x, y) for x in range(int(zx - r) - 2, int(zx + r) + 3) for y in range(int(zy - r) - 2, int(zy + r) + 3)
                 if math.hypot(x + 0.5 - zx, y + 0.5 - zy) < r]
-        place_civilians(cand, pool, density)
+        civ_stats.append((f'{pool} @ {lon:.2f},{lat:.2f} r={r}', len(cand), len(place_civilians(cand, pool, density))))
     if getattr(cfg, 'CIVILIAN_FILL', None):       # (pool, density) over the rest of the built-up area
-        place_civilians(list(zip(*np.nonzero(city & flat))), *cfg.CIVILIAN_FILL, inside=city)
+        cand = list(zip(*np.nonzero(city & flat)))
+        civ_stats.append(('fill (city area)', len(cand), len(place_civilians(cand, *cfg.CIVILIAN_FILL, inside=city))))
+
+# --- ore drills: one in the middle of every ore field, so the field grows back ------------------
+drills = {}
+for cx, cy, kind in fields:
+    if kind != 'ore':
+        continue
+    near = sorted(((x, y) for x in range(int(cx) - 3, int(cx) + 4) for y in range(int(cy) - 3, int(cy) + 4)),
+                  key=lambda c: math.hypot(c[0] + 0.5 - cx, c[1] + 0.5 - cy))
+    for x, y in near:
+        if VALID[x, y] and flat[x, y] and not water_cell[x, y] and not taken[x, y] and in_local(x, y, 3):
+            overlay[x, y] = 255
+            taken[x, y] = True
+            drills[y * 1000 + x] = f'TIBTRE0{int(rng.integers(1, 4))}'
+            break
 
 # ore density: fuller in the middle of a field, as FinalAlert does it
 odata = np.zeros((N, N), int)
@@ -534,9 +557,7 @@ for rx, ry in CELLS:
         trees = cfg.MOUNTAIN_TREES if mountain[rx, ry] else cfg.VALLEY_TREES
         terrain[ry * 1000 + rx] = trees[int(rng.integers(len(trees)))]
 terrain.update(props)
-for name, lon, lat in cfg.ORE_DRILLS:     # ore drills next to the mining camps
-    rx, ry = to_iso(lon, lat)
-    terrain[(int(ry) - 3) * 1000 + int(rx) + 3] = 'TIBTRE01'
+terrain.update(drills)
 
 # --- preview ---------------------------------------------------------------------------
 
@@ -653,6 +674,8 @@ def report():
     print('ramps', int((VALID & (ramp > 0)).sum()), 'flat', int(flat.sum()), 'water+shore', int((water_cell & VALID).sum()))
     print('trees', len(terrain), 'ore cells', int(((overlay >= 100) & (overlay != 255)).sum()),
           'gem cells', int((overlay < 100).sum()), 'structures', len(structures))
+    for zone, n, k in civ_stats:
+        print(f'  civilians {zone:34s} cells={n:5d} placed={k}')
     for (name, *_), (x, y) in zip(cfg.STARTS, start_cells):
         others = [math.hypot(x - a, y - b) for a, b in start_cells if (a, b) != (x, y)]
         ore = int(((overlay != 255) & (np.hypot(CX - x, CY - y) < 14)).sum())
