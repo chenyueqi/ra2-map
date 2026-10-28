@@ -8,14 +8,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 import tileset
 
-OUT = os.path.join(os.path.dirname(__file__), 'out')
-S = int(sys.argv[1]) if len(sys.argv) > 1 else 8          # half cell width in pixels
+OUT = os.path.join(os.path.dirname(__file__), 'out', sys.argv[1] if len(sys.argv) > 1 else 'colorado')
+S = int(sys.argv[2]) if len(sys.argv) > 2 else 8          # half cell width in pixels
 st = np.load(os.path.join(OUT, 'state.npz'))
 obj = json.load(open(os.path.join(OUT, 'objects.json')))
-TS = tileset.load()
-h, level, tile, overlay, valid = st['heights'], st['level'], st['tile'], st['overlay'], st['valid']
-W, H = 100, 154
-LX, LY, LW, LH = 2, 4, 96, 141
+TS = tileset.load(os.path.join(os.path.dirname(__file__), 'ref/temperat.yaml'))
+h, level, tile, sub, overlay, valid = st['heights'], st['level'], st['tile'], st['sub'], st['overlay'], st['valid']
+W, H = obj['W'], obj['H']
+LX, LY, LW, LH = obj['local']
 X0, X1, Y0, Y1 = -(W - 2 * LX), 2 * (LX + LW) - W, W + 2 * LY, W + 2 * (LY + LH + 1)
 
 
@@ -28,7 +28,7 @@ d = ImageDraw.Draw(img)
 cells = sorted(zip(*np.nonzero(valid)), key=lambda c: (c[0] + c[1], c[0]))
 for rx, ry in cells:
     t = int(tile[rx, ry])
-    col = np.array([int(TS[t]['tiles'][0]['color'][i:i + 2], 16) for i in (0, 2, 4)], float)
+    col = np.array([int(TS[t]['tiles'][int(sub[rx, ry])]['color'][i:i + 2], 16) for i in (0, 2, 4)], float)
     c = [h[rx, ry], h[rx + 1, ry], h[rx + 1, ry + 1], h[rx, ry + 1]]
     shade = 1.0 + 0.16 * ((c[2] + c[1]) - (c[0] + c[3])) + 0.025 * level[rx, ry]
     if overlay[rx, ry] != 255:
@@ -39,7 +39,6 @@ for rx, ry in cells:
 for k, name in obj['terrain'].items():
     k = int(k)
     rx, ry = k % 1000, k // 1000
-    x, y = pt(rx + 0.5 if False else rx, ry)
     x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
     col = (34, 70, 30) if name.startswith('TREE') else (230, 120, 20)
     d.ellipse([x - S * 0.55, y - S * 0.9, x + S * 0.55, y + S * 0.2], fill=col)
@@ -49,7 +48,7 @@ for s in obj['structures']:
     x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
     d.rectangle([x - S, y - S, x + S * 2, y + S], fill=(90, 90, 100), outline=(255, 255, 255))
 try:
-    font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', max(12, int(S * 1.6)))
+    font = ImageFont.truetype('/System/Library/Fonts/Hiragino Sans GB.ttc', max(12, int(S * 1.6)))
 except OSError:
     font = ImageFont.load_default()
 colors = [(220, 40, 40), (40, 110, 230), (240, 200, 30), (40, 180, 60), (240, 130, 20), (150, 60, 200),
