@@ -2,11 +2,13 @@
 import collections, struct, sys
 import ra2codec as C, tileset
 from inspect_map import sections
-T = tileset.load()
 path = sys.argv[1]
 raw = open(path, 'rb').read()
 assert b'\r\n' in raw and raw.count(b'\n') == raw.count(b'\r\n'), 'line endings'
 s = sections(path)
+THEATER = s['Map']['Theater']
+T = tileset.load({'TEMPERATE': 'ref/temperat.yaml', 'URBAN': 'ref/urban.yaml'}[THEATER])
+print('theater', THEATER)
 W, H = map(int, s['Map']['Size'].split(',')[2:])
 iso = C.unpack(C.from_ini_section(s['IsoMapPack5'].values()), 5)
 assert len(iso) == (2 * W - 1) * H * 11, len(iso)
@@ -56,12 +58,30 @@ for k, v in s['Terrain'].items():
     assert ov[x + 512 * y] == 255, ('tree on ore', k)
     trees[(x, y)] = v
 print('terrain objects', collections.Counter(trees.values()).most_common(3), len(trees))
+import buildings
+CIV = buildings.load(THEATER)
+DIMS = {'CAOILD': (2, 2), 'CAAIRP': (3, 3), 'CAHOSP': (6, 4), 'CAOUTP': (4, 3)}
+occupied = {}
 for k, v in s['Structures'].items():
     f = v.split(',')
-    assert len(f) == 17, v
-    x, y = int(f[3]), int(f[4])
-    assert all(cells[(x + a, y + b)][0] not in range(29, 49) for a in range(2) for b in range(2)), v
-    print('  structure', f[1], x, y, 'level', cells[(x, y)][2])
+    assert len(f) == 17 and f[0] == 'Neutral', v
+    kind, x, y = f[1], int(f[3]), int(f[4])
+    if kind in DIMS:
+        w, h = DIMS[kind]
+    else:
+        assert kind in CIV and CIV[kind]['available'], ('no art in this theater', kind)
+        w, h = CIV[kind]['w'], CIV[kind]['h']
+    foot = [(x + a, y + b) for a in range(w) for b in range(h)]
+    assert all(c in cells for c in foot), v
+    assert all(T[cells[c][0]]['cat'] not in ('Ramps', 'Water', 'Shore Pieces') for c in foot), ('bad ground', v)
+    assert len({cells[c][2] for c in foot}) == 1, ('uneven', v)
+    for c in foot:
+        assert c not in occupied, ('overlap', v, occupied.get(c))
+        assert c not in trees, ('tree under building', v)
+        assert ov[c[0] + 512 * c[1]] == 255, ('ore under building', v)
+        occupied[c] = kind
+print('structures', len(s['Structures']), 'footprints ok;', collections.Counter(
+    'tech' if v.split(',')[1] in DIMS else 'civilian' for v in s['Structures'].values()))
 for k, v in s['Waypoints'].items():
     v = int(v); x, y = v % 1000, v // 1000
     print('  start', k, (x, y), cells[(x, y)])

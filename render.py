@@ -12,7 +12,8 @@ OUT = os.path.join(os.path.dirname(__file__), 'out', sys.argv[1] if len(sys.argv
 S = int(sys.argv[2]) if len(sys.argv) > 2 else 8          # half cell width in pixels
 st = np.load(os.path.join(OUT, 'state.npz'))
 obj = json.load(open(os.path.join(OUT, 'objects.json')))
-TS = tileset.load(os.path.join(os.path.dirname(__file__), 'ref/temperat.yaml'))
+TS = tileset.load(os.path.join(os.path.dirname(__file__), 'ref',
+                               {'TEMPERATE': 'temperat.yaml', 'URBAN': 'urban.yaml'}[obj.get('theater', 'TEMPERATE')]))
 h, level, tile, sub, overlay, valid = st['heights'], st['level'], st['tile'], st['sub'], st['overlay'], st['valid']
 W, H = obj['W'], obj['H']
 LX, LY, LW, LH = obj['local']
@@ -42,11 +43,21 @@ for k, name in obj['terrain'].items():
     x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
     col = (34, 70, 30) if name.startswith('TREE') else (230, 120, 20)
     d.ellipse([x - S * 0.55, y - S * 0.9, x + S * 0.55, y + S * 0.2], fill=col)
+import buildings
+CIV = buildings.load(obj.get('theater', 'TEMPERATE'))
+DIMS = {'CAOILD': (2, 2), 'CAAIRP': (3, 3), 'CAHOSP': (6, 4), 'CAOUTP': (4, 3)}
 for s in obj['structures']:
     f = s.split(',')
-    rx, ry = int(f[3]), int(f[4])
-    x, y = (rx - ry - X0) * S, (rx + ry + 1 - Y0) * S / 2 - level[rx, ry] * S / 2 + 6 * S
-    d.rectangle([x - S, y - S, x + S * 2, y + S], fill=(90, 90, 100), outline=(255, 255, 255))
+    rx, ry, kind = int(f[3]), int(f[4]), f[1]
+    fw, fh = DIMS.get(kind) or (CIV[kind]['w'], CIV[kind]['h'])
+    tall = S * (2.5 if kind.startswith(('CANEWY', 'CANWY', 'CACHIG', 'CAMIAM', 'CAWASH')) else 1.2)
+    base = [pt(rx, ry), pt(rx + fw, ry), pt(rx + fw, ry + fh), pt(rx, ry + fh)]
+    top = [(x, y - tall) for x, y in base]
+    civ = kind not in DIMS
+    wall, roof = ((150, 140, 130), (205, 195, 180)) if civ else ((80, 80, 95), (120, 120, 140))
+    d.polygon([base[1], base[2], top[2], top[1]], fill=tuple(int(v * 0.8) for v in wall))
+    d.polygon([base[2], base[3], top[3], top[2]], fill=wall)
+    d.polygon(top, fill=roof, outline=(60, 60, 60))
 try:
     font = ImageFont.truetype('/System/Library/Fonts/Hiragino Sans GB.ttc', max(12, int(S * 1.6)))
 except OSError:

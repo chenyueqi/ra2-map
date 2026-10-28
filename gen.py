@@ -23,7 +23,8 @@ g = sys.modules[__name__]           # engine context handed to the region's grou
 OUT = os.path.join(HERE, 'out', REGION)
 os.makedirs(OUT, exist_ok=True)
 rng = np.random.default_rng(cfg.SEED)
-TS = tileset.load(os.path.join(HERE, 'ref/temperat.yaml'))
+THEATER = getattr(cfg, 'THEATER', 'TEMPERATE')
+TS = tileset.load(os.path.join(HERE, 'ref', {'TEMPERATE': 'temperat.yaml', 'URBAN': 'urban.yaml'}[THEATER]))
 
 # --- map geometry --------------------------------------------------------------
 W, H = cfg.W, cfg.H
@@ -262,6 +263,10 @@ def lock_disc(lon, lat, r):
     near = lock[d <= r + 5]
     if (~np.isnan(near)).any():         # join a neighbouring flat area instead of stepping next to it
         lvl = float(np.round(np.nanmedian(near)))
+    if (~np.isnan(lock)).any():         # stay reachable by 1-level ramps from every flat area already placed
+        hi = relax_min(np.where(np.isnan(lock), np.inf, lock))[area].min()
+        lo = -relax_min(np.where(np.isnan(lock), np.inf, -lock))[area].max()
+        lvl = float(min(max(lvl, lo), hi))
     lock[area & np.isnan(lock)] = lvl
     return lvl
 
@@ -275,6 +280,8 @@ for _, lon, lat in cfg.GEM_TOWNS:
 for _, lon, lat in cfg.OIL:
     lock_disc(lon, lat, 3)
 for _, _, lon, lat, w, h in cfg.TECH:
+    lock_disc(lon, lat, max(w, h) + 1.5)
+for _, _, lon, lat, w, h in getattr(cfg, 'LANDMARKS', []):
     lock_disc(lon, lat, max(w, h) + 1.5)
 
 upper = relax_min(np.where(np.isnan(lock), np.inf, lock))
@@ -331,8 +338,14 @@ GRASS, THICK, ROUGH, SAND, PAVE = 0, 131, 418, 493, 534
 LAT_START = {THICK: 132, ROUGH: 419, SAND: 494, PAVE: 463}
 
 cover, mountain, tree_p = cfg.ground_cover(g)
+city = np.zeros((N, N), bool)
 for _, lon, lat, r in cfg.CITIES:
-    cover[dist_to_point(lon, lat) < r + 1.6 * (NOISE2 - 0.5)] = PAVE
+    city |= dist_to_point(lon, lat) < r + 1.6 * (NOISE2 - 0.5)
+if hasattr(cfg, 'urban_mask'):           # whole built-up area, not just the city centres
+    city |= cfg.urban_mask(g) & VALID & ~water_cell
+cover[city] = getattr(cfg, 'CITY_COVER', PAVE)
+if hasattr(cfg, 'city_cover'):          # e.g. plazas inside the city
+    cfg.city_cover(g, cover, city)
 cover[~flat | water_cell] = GRASS
 
 tile = np.zeros((N, N), int)
@@ -430,6 +443,75 @@ for _, lon, lat in cfg.OIL:
     place_building('CAOILD', lon, lat, 2, 2)
 for kind, _, lon, lat, w, h in cfg.TECH:
     place_building(kind, lon, lat, w, h)
+for kind, _, lon, lat, w, h in getattr(cfg, 'LANDMARKS', []):
+    place_building(kind, lon, lat, w, h)
+
+# --- civilian buildings: city blocks with streets between them -------------------------------
+props = {}
+GAP = {'farm': 4, 'suburb': 2, 'campus': 2}         # street width around a building (cells)
+
+
+def place_props(placed, pool):
+    """A few street lights / traffic lights on open corners next to buildings (never in a one-cell lane)."""
+    for x, y, w, h in placed:
+        if pool == 'farm' or rng.random() >= cfg.PROP_DENSITY:
+            continue
+        px, py = x + w, y - 1
+        if not (VALID[px, py] and flat[px, py] and in_local(px, py, 3)) or taken[px, py] or water_cell[px, py]:
+            continue
+        open4 = sum(VALID[px + a, py + b] and flat[px + a, py + b] and not taken[px + a, py + b]
+                    for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        if open4 >= 3 and overlay[px, py] == 255:
+            kind = 'TRFF0' if pool == 'highrise' and rng.random() < 0.4 else 'LT_GEN0'
+            props[py * 1000 + px] = f'{kind}{int(rng.integers(1, 5))}'
+            taken[px, py] = True
+
+
+def place_civilians(cand, pool, density, inside=None):
+    """Greedy placement over candidate cells in random order; returns the footprints placed."""
+    gap = GAP.get(pool, 1)
+    kinds = [k for k in cfg.CIVILIAN_POOLS[pool] if CIV[k]['available'] and max(CIV[k]['w'], CIV[k]['h']) <= 4]
+    placed = []
+    for i in rng.permutation(len(cand)):
+        x, y = (int(v) for v in cand[i])
+        if rng.random() >= density:
+            continue
+        for k in rng.permutation(kinds)[:4]:
+            w, h = CIV[k]['w'], CIV[k]['h']
+            if (inside is None or inside[x:x + w, y:y + h].all()) and civ_ok(x, y, w, h):
+                blocked[x - gap:x + w + gap, y - gap:y + h + gap] = True
+                taken[x:x + w, y:y + h] = True
+                structures.append(f'Neutral,{k},256,{x},{y},64,None,1,0,1,0,0,None,None,None,0,0')
+                placed.append((x, y, w, h))
+                break
+    place_props(placed, pool)
+    return placed
+
+
+def civ_ok(x, y, w, h):
+    foot = (slice(x, x + w), slice(y, y + h))
+    return (x > 0 and y > 0 and VALID[foot].all() and not blocked[foot].any()
+            and len(set(level[foot].ravel())) == 1 and in_local(x, y, 3) and in_local(x + w, y + h, 3))
+
+
+if getattr(cfg, 'CIVILIAN_ZONES', None):
+    import buildings
+    CIV = buildings.load(THEATER)
+    keep_clear = np.zeros((N, N), bool)
+    for sx, sy in (to_iso(lon, lat) for _, lon, lat in cfg.STARTS):
+        keep_clear |= np.hypot(CX + 0.5 - sx, CY + 0.5 - sy) < cfg.CIVILIAN_START_CLEAR
+    ore_near = overlay != 255
+    for _ in range(2):
+        ore_near = ore_near | shift(ore_near, 1, 0, False) | shift(ore_near, -1, 0, False) | \
+            shift(ore_near, 0, 1, False) | shift(ore_near, 0, -1, False)
+    blocked = taken | keep_clear | ore_near | water_cell | ~flat
+    for lon, lat, r, pool, density in cfg.CIVILIAN_ZONES:
+        zx, zy = to_iso(lon, lat)
+        cand = [(x, y) for x in range(int(zx - r) - 2, int(zx + r) + 3) for y in range(int(zy - r) - 2, int(zy + r) + 3)
+                if math.hypot(x + 0.5 - zx, y + 0.5 - zy) < r]
+        place_civilians(cand, pool, density)
+    if getattr(cfg, 'CIVILIAN_FILL', None):       # (pool, density) over the rest of the built-up area
+        place_civilians(list(zip(*np.nonzero(city & flat))), *cfg.CIVILIAN_FILL, inside=city)
 
 # ore density: fuller in the middle of a field, as FinalAlert does it
 odata = np.zeros((N, N), int)
@@ -440,7 +522,7 @@ odata[has] = np.clip(cnt[has] + 3, 3, 11)
 # --- trees ------------------------------------------------------------------------------
 p = tree_p.copy()
 p[ROAD_D < 1.2] = 0
-p[cover == PAVE] = 0.0
+p[city & flat & ~water_cell] = 0.0
 p[~np.isnan(lock)] *= 0.15
 for sx, sy in start_cells:
     p[np.hypot(CX - sx, CY - sy) < cfg.START_FLAT + 1] = 0
@@ -451,6 +533,7 @@ for rx, ry in CELLS:
     if in_local(rx, ry, 2) and rng.random() < p[rx, ry]:
         trees = cfg.MOUNTAIN_TREES if mountain[rx, ry] else cfg.VALLEY_TREES
         terrain[ry * 1000 + rx] = trees[int(rng.integers(len(trees)))]
+terrain.update(props)
 for name, lon, lat in cfg.ORE_DRILLS:     # ore drills next to the mining camps
     rx, ry = to_iso(lon, lat)
     terrain[(int(ry) - 3) * 1000 + int(rx) + 3] = 'TIBTRE01'
@@ -531,7 +614,7 @@ def build_ini():
                            'NewINIFormat=4', 'NextScenario=', 'CarryOverMoney=0.000000', 'AltNextScenario=',
                            'MultiplayerOnly=1', 'IceGrowthEnabled=yes', 'VeinGrowthEnabled=yes',
                            'TiberiumGrowthEnabled=yes', 'IgnoreGlobalAITriggers=no', 'TiberiumDeathToVisceroid=no']))
-    secs.append(('Map', [f'Size=0,0,{W},{H}', 'Theater=TEMPERATE', f'LocalSize={LX},{LY},{LW},{LH}']))
+    secs.append(('Map', [f'Size=0,0,{W},{H}', f'Theater={THEATER}', f'LocalSize={LX},{LY},{LW},{LH}']))
     secs.append(('Lighting', [f'Red={li["Red"]:.6f}', f'Blue={li["Blue"]:.6f}', f'Green={li["Green"]:.6f}',
                               f'Level={li["Level"]:.6f}', 'Ground=0.000000', 'IonRed=1.100000',
                               f'Ambient={li["Ambient"]:.6f}', 'IonBlue=1.200000',
@@ -557,7 +640,7 @@ def build_ini():
         secs.append((s, []))
     secs.append(('Digest', ['1=' + C.to_ini_lines(bytes(rng.integers(0, 256, 20, dtype=np.uint8)))[0]]))
     out = [f'; {cfg.NAME} - Red Alert 2 multiplayer map generated from real elevation (AWS Terrain Tiles)',
-           f'; and Natural Earth rivers. {len(cfg.STARTS)} players, temperate.', '']
+           f'; and Natural Earth rivers. {len(cfg.STARTS)} players, {THEATER.lower()}.', '']
     for name, lines in secs:
         out.append(f'[{name}]')
         out += [f'{i + 1}={l}' for i, l in enumerate(lines)] if name == 'PreviewPack' else lines
@@ -583,6 +666,7 @@ if __name__ == '__main__':
     np.savez(os.path.join(OUT, 'state.npz'), heights=heights, level=level, ramp=ramp, tile=tile, sub=sub,
              overlay=overlay, valid=VALID, cover=cover)
     json.dump({'terrain': terrain, 'structures': structures, 'starts': start_cells,
-               'names': [s[0] for s in cfg.STARTS], 'W': W, 'H': H, 'local': [LX, LY, LW, LH]},
+               'names': [s[0] for s in cfg.STARTS], 'W': W, 'H': H, 'local': [LX, LY, LW, LH],
+               'theater': THEATER},
               open(os.path.join(OUT, 'objects.json'), 'w'))
     report()
