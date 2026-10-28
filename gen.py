@@ -173,8 +173,29 @@ fixed_sub = np.zeros((N, N), int)
 water_cell = np.zeros((N, N), bool)     # water or shore: no ore, trees, buildings, LAT
 
 
+def components(mask):
+    """4-connected components of a boolean grid: (label array, sizes)."""
+    lab = np.full(mask.shape, -1)
+    sizes = []
+    for start in zip(*np.nonzero(mask)):
+        if lab[start] >= 0:
+            continue
+        stack, n = [start], 0
+        lab[start] = len(sizes)
+        while stack:
+            x, y = stack.pop()
+            n += 1
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= nx < mask.shape[0] and 0 <= ny < mask.shape[1] and mask[nx, ny] and lab[nx, ny] < 0:
+                    lab[nx, ny] = len(sizes)
+                    stack.append((nx, ny))
+        sizes.append(n)
+    return lab, np.array(sizes)
+
+
 def build_water():
-    if not cfg.WATER_RIVERS and not cfg.LAKES:
+    water_corners = getattr(cfg, 'water_corners', None)
+    if not cfg.WATER_RIVERS and not cfg.LAKES and not water_corners:
         return
     wd = polyline_distance(cfg.WATER_RIVERS, offset=0.0) if cfg.WATER_RIVERS else np.full((N, N), np.inf)
     wet = wd < cfg.WATER_HALF_WIDTH
@@ -182,8 +203,22 @@ def build_water():
         dx = (CORNER_LON - lon) * 111.32 * math.cos(math.radians(lat)) / a_km
         dy = (CORNER_LAT - lat) * 111.0 / b_km
         wet |= dx * dx + dy * dy < 1
+    if water_corners:
+        wet |= water_corners(g)
+    keep_land = np.zeros((N, N), bool)
+    for lon, lat, r in getattr(cfg, 'ISLANDS', []):    # islands too small for the DEM at this scale
+        rx, ry = to_iso(lon, lat)
+        keep_land |= np.hypot(CX - rx, CY - ry) < r
+    wet &= ~keep_land
     B = N // 2
     lab = wet[0:2 * B:2, 0:2 * B:2].copy()     # labels on block corners (even corner coordinates)
+    keep = keep_land[0:2 * B:2, 0:2 * B:2]
+    for kind, min_size in ((True, getattr(cfg, 'MIN_WATER_CORNERS', 0)), (False, getattr(cfg, 'MIN_LAND_CORNERS', 0))):
+        comp, sizes = components(lab == kind)
+        small = (comp >= 0) & (sizes[comp] < min_size)
+        if not kind:
+            small &= ~np.isin(comp, np.unique(comp[keep & (comp >= 0)]))
+        lab[small] = not kind
     while True:                                # remove saddles (opposite corners wet) by flooding them
         t, r, b, l = lab[:-1, :-1], lab[1:, :-1], lab[1:, 1:], lab[:-1, 1:]
         saddle = (t & b & ~r & ~l) | (r & l & ~t & ~b)
@@ -347,22 +382,24 @@ for name, lon, lat in cfg.STARTS:
     start_cells.append((int(rx), int(ry)))
     taken |= np.hypot(CX + 0.5 - rx, CY + 0.5 - ry) < 5.5
 for (name, lon, lat), (sx, sy) in zip(cfg.STARTS, start_cells):
-    assert not water_cell[sx - 6:sx + 7, sy - 6:sy + 7].any(), f'{name} start is too close to water'
+    clear = getattr(cfg, 'START_WATER_CLEAR', 6)
+    assert not water_cell[sx - clear:sx + clear + 1, sy - clear:sy + clear + 1].any(), f'{name} start is too close to water'
     away = math.atan2(sy + 0.5 - center[1], sx + 0.5 - center[0])
     placed = 0
-    for da in (0.9, -0.9, 0.3, -0.3, 1.6, -1.6, 2.4, -2.4):
-        if placed == 2:
-            break
-        a = away + da
-        fx, fy = sx + 0.5 + cfg.START_ORE_DIST * math.cos(a), sy + 0.5 + cfg.START_ORE_DIST * math.sin(a)
-        if not in_local(fx, fy, 6):
-            continue
-        if (overlay[int(fx) - 3:int(fx) + 4, int(fy) - 3:int(fy) + 4] != 255).any():
-            continue
-        n = place_field(fx, fy, 2.9, 'ore')
-        if n >= 18:
-            placed += 1
-    assert placed == 2, name
+    for dist in (cfg.START_ORE_DIST, cfg.START_ORE_DIST - 1.5, cfg.START_ORE_DIST + 1.5):
+        for da in (0.9, -0.9, 0.3, -0.3, 1.6, -1.6, 2.4, -2.4):
+            if placed == 2:
+                break
+            a = away + da
+            fx, fy = sx + 0.5 + dist * math.cos(a), sy + 0.5 + dist * math.sin(a)
+            if not in_local(fx, fy, 6):
+                continue
+            if (overlay[int(fx) - 3:int(fx) + 4, int(fy) - 3:int(fy) + 4] != 255).any():
+                continue
+            n = place_field(fx, fy, 2.9, 'ore')
+            if n >= 18:
+                placed += 1
+    assert placed >= getattr(cfg, 'START_FIELDS_MIN', 2), name
 for _, lon, lat in cfg.ORE_TOWNS:
     place_field(*to_iso(lon, lat), 2.6, 'ore')
 for _, lon, lat in cfg.GEM_TOWNS:
@@ -374,9 +411,16 @@ structures = []
 
 def place_building(kind, lon, lat, w, h):
     rx, ry = to_iso(lon, lat)
-    x, y = int(rx - w / 2), int(ry - h / 2)
-    foot = (slice(x, x + w), slice(y, y + h))
-    assert flat[foot].all() and VALID[foot].all() and not water_cell[foot].any(), kind
+    x0, y0 = int(rx - w / 2), int(ry - h / 2)
+
+    def ok(x, y):
+        foot = (slice(x, x + w), slice(y, y + h))
+        return (flat[foot].all() and VALID[foot].all() and not water_cell[foot].any() and not taken[foot].any()
+                and len(set(level[foot].ravel())) == 1)
+    # the real spot can sit right on a shoreline at this scale: take the nearest dry flat footprint
+    spots = sorted(((dx, dy) for dx in range(-5, 6) for dy in range(-5, 6)), key=lambda d: math.hypot(*d))
+    x, y = next(((x0 + dx, y0 + dy) for dx, dy in spots if ok(x0 + dx, y0 + dy)), (None, None))
+    assert x is not None, (kind, lon, lat)
     taken[x - 1:x + w + 1, y - 1:y + h + 1] = True
     overlay[x - 1:x + w + 1, y - 1:y + h + 1] = 255
     structures.append(f'Neutral,{kind},256,{x},{y},64,None,1,0,1,0,0,None,None,None,0,0')
