@@ -1,5 +1,5 @@
 """Which land masses of a generated map are connected (shore and water cells count as water)."""
-import importlib, json, sys
+import importlib, json, os, sys
 import numpy as np
 region, conn = sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 4
 cfg = importlib.import_module(f'regions.{region}')
@@ -10,7 +10,10 @@ tile, valid = st['tile'], st['valid']
 water = ((tile >= 89) & (tile <= 130)) | ((tile >= 314) & (tile <= 327))
 N = valid.shape[0]
 CX, CY = np.meshgrid(np.arange(N), np.arange(N), indexing='ij')
-land = valid & ~water & (CX-CY > X0) & (CX-CY < X1) & (CX+CY > Y0) & (CX+CY <= Y1)
+bridge = st['bridge'] if 'bridge' in st else np.zeros_like(valid)
+if os.environ.get('NOBRIDGE'):                  # which land is cut off when every bridge is down
+    water, bridge = water | bridge, np.zeros_like(valid)
+land = valid & (~water | bridge) & (CX-CY > X0) & (CX-CY < X1) & (CX+CY > Y0) & (CX+CY <= Y1)
 import buildings
 CIV = buildings.load(obj.get('theater', 'TEMPERATE'))
 DIMS = {'CAOILD': (2, 2), 'CAAIRP': (3, 3), 'CAHOSP': (6, 4), 'CAOUTP': (4, 3)}

@@ -4,8 +4,8 @@ import numpy as np
 NAME = 'Colorado'
 OUTFILE = 'colorado.mpr'
 SEED = 1876  # statehood
-W, H = 100, 154
-LX, LY, LW, LH = 2, 4, 96, 141
+W, H = 140, 111
+LX, LY, LW, LH = 2, 4, 136, 98
 LON0, LON1, LAT0, LAT1 = -109.05, -102.04, 41.0, 37.0
 DEM_DIR, DEM_ZOOM = 'data/dem', 8
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 3, 8, 6

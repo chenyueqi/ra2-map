@@ -8,8 +8,8 @@ import numpy as np
 NAME = 'Hohhot'
 OUTFILE = 'hohhot.mpr'
 SEED = 1581  # Guihua city founded by Altan Khan
-W, H = 84, 188
-LX, LY, LW, LH = 2, 4, 80, 175
+W, H = 117, 136
+LX, LY, LW, LH = 2, 4, 113, 123
 LON0, LON1, LAT0, LAT1 = 110.62, 112.41, 41.35, 39.85
 DEM_DIR, DEM_ZOOM = 'data/dem_hohhot', 9
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 2, 8, 4

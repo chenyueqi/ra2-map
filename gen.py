@@ -220,6 +220,21 @@ def build_water():
         if not kind:
             small &= ~np.isin(comp, np.unique(comp[keep & (comp >= 0)]))
         lab[small] = not kind
+    for line in cfg.WATER_RIVERS:              # drawn rivers stay unbroken: stamp the centreline as a 4-connected chain
+        prev = None
+        for (a, b), (c, d) in zip(line, line[1:]):
+            p, q = to_iso(a, b), to_iso(c, d)
+            n = max(1, int(math.hypot(q[0] - p[0], q[1] - p[1]) / 0.25))
+            for k in range(n + 1):
+                bx = int(round((p[0] + (q[0] - p[0]) * k / n) / 2))
+                by = int(round((p[1] + (q[1] - p[1]) * k / n) / 2))
+                if not (0 <= bx < B and 0 <= by < B):
+                    prev = None
+                    continue
+                lab[bx, by] = True
+                if prev and prev[0] != bx and prev[1] != by:
+                    lab[prev[0], by] = True
+                prev = (bx, by)
     while True:                                # remove saddles (opposite corners wet) by flooding them
         t, r, b, l = lab[:-1, :-1], lab[1:, :-1], lab[1:, 1:], lab[:-1, 1:]
         saddle = (t & b & ~r & ~l) | (r & l & ~t & ~b)
@@ -254,6 +269,71 @@ if water_cell.any():
         shift(wet_corner, 0, 1, False) | shift(wet_corner, 0, -1, False)
     lock[near] = cfg.WATER_LEVEL
 
+# --- bridges: low concrete bridges at the real crossings (layout learned from urban_hexbay / urban_xoceansid) ---
+# A bridge is 3 cells wide and runs along rx (axis 0) or ry (axis 1): a start cap on the first dry cell, deck
+# pieces over shore and water, an end cap on the far dry cell; overlay data is the cell's place across the deck.
+BRIDGE_IDS = {0: ([74, 75, 76, 77], 94, 92), 1: ([83, 84, 85, 86], 96, 98)}
+BRIDGE_APPROACH = 3                     # dry cells kept clear and level beyond each cap
+bridge_plans = []                       # (name, axis, cell(t, k), a, b): caps at t = a and t = b
+bridge_reserved = np.zeros((N, N), bool)
+bank = None
+
+
+def on_map(c):
+    return 0 <= c[0] < N and 0 <= c[1] < N and VALID[c]
+
+
+def plan_bridge(name, lon, lat, max_len=60):
+    global bank
+    if bank is None:                    # land masses before any bridge: a bridge must join two of them
+        bank, _ = components(VALID & ~water_cell)
+    rx, ry = to_iso(lon, lat)
+    seeds = sorted(((x, y) for x in range(int(rx) - 6, int(rx) + 7) for y in range(int(ry) - 6, int(ry) + 7)
+                    if water_cell[x, y]), key=lambda c: math.hypot(c[0] + 0.5 - rx, c[1] + 0.5 - ry))
+    best = None
+    for sx, sy in seeds[:20]:
+        for axis in (0, 1):
+            def cell(t, k, sx=sx, sy=sy, axis=axis):
+                return (sx + t, sy + k) if axis == 0 else (sx + k, sy + t)
+
+            def wet(t):
+                return any(on_map(c) and water_cell[c] for c in (cell(t, k) for k in (-1, 0, 1)))
+            a = b = 0
+            while wet(a - 1) and a > -max_len:
+                a -= 1
+            while wet(b + 1) and b < max_len:
+                b += 1
+            a, b = a - 1, b + 1
+            if b - a > max_len:
+                continue
+            ends = [cell(t, k) for t in (a - BRIDGE_APPROACH, b + BRIDGE_APPROACH) for k in (-1, 0, 1)]
+            dry = [cell(t, k) for t in list(range(a - BRIDGE_APPROACH, a + 1)) + list(range(b, b + BRIDGE_APPROACH + 1))
+                   for k in (-1, 0, 1)]
+            if not all(on_map(c) and in_local(*c, 2) for c in ends + dry) or any(water_cell[c] for c in dry):
+                continue
+            if bank[cell(a, 0)] == bank[cell(b, 0)]:
+                continue                  # both ends on the same bank: it would only span a bay or a bend
+            if any(bridge_reserved[cell(t, k)] for t in range(a - 1, b + 2) for k in (-2, -1, 0, 1, 2)):
+                continue                  # keep a lane between neighbouring decks (approaches may share ground)
+            if best is None or b - a < best[0]:
+                best = (b - a, axis, cell, a, b)
+    if best is None:
+        print(f'  warning: no crossing between two land masses near bridge {name}, skipped')
+        return
+    _, axis, cell, a, b = best
+    for t in range(a, b + 1):
+        for k in (-1, 0, 1):
+            bridge_reserved[cell(t, k)] = True
+    for t in list(range(a - BRIDGE_APPROACH, a + 1)) + list(range(b, b + BRIDGE_APPROACH + 1)):
+        for k in (-1, 0, 1):              # caps and approaches flat at the water's level
+            x, y = cell(t, k)
+            lock[x:x + 2, y:y + 2] = cfg.WATER_LEVEL
+    bridge_plans.append((name, axis, cell, a, b))
+
+
+for _name, _lon, _lat in getattr(cfg, 'BRIDGES', []):
+    plan_bridge(_name, _lon, _lat)
+
 
 def lock_disc(lon, lat, r):
     rx, ry = to_iso(lon, lat)
@@ -264,9 +344,10 @@ def lock_disc(lon, lat, r):
     if (~np.isnan(near)).any():         # join a neighbouring flat area instead of stepping next to it
         lvl = float(np.round(np.nanmedian(near)))
     if (~np.isnan(lock)).any():         # stay reachable by 1-level ramps from every flat area already placed
-        hi = relax_min(np.where(np.isnan(lock), np.inf, lock))[area].min()
-        lo = -relax_min(np.where(np.isnan(lock), np.inf, -lock))[area].max()
-        lvl = float(min(max(lvl, lo), hi))
+        upper = relax_min(np.where(np.isnan(lock), np.inf, lock))
+        lower = -relax_min(np.where(np.isnan(lock), np.inf, -lock))
+        lvl = float(min(max(lvl, lower[area].max()), upper[area].min()))
+        area &= (lower <= lvl) & (lvl <= upper)   # squeezed between two flat areas: leave the slope between them free
     lock[area & np.isnan(lock)] = lvl
     return lvl
 
@@ -374,6 +455,23 @@ for rx, ry in CELLS:
 ORE, ORE_B, GEM, GEM_B = 102, 112, 27, 30
 overlay = np.full((N, N), 255)
 taken = np.zeros((N, N), bool)          # cells reserved by buildings / start areas
+bridge_cell = np.zeros((N, N), bool)
+bridge_data = np.zeros((N, N), int)
+for name, axis, cell, a, b in bridge_plans:
+    body, cap_a, cap_b = BRIDGE_IDS[axis]
+    for t in range(a - BRIDGE_APPROACH, b + BRIDGE_APPROACH + 1):
+        for k in (-1, 0, 1):
+            x, y = cell(t, k)
+            taken[x, y] = True
+            if a < t < b:
+                overlay[x, y] = body[int(rng.integers(4))]
+            elif t in (a, b):
+                assert flat[x, y] and level[x, y] == cfg.WATER_LEVEL, f'bridge {name} cap not level at {(x, y)}'
+                overlay[x, y] = cap_a if t == a else cap_b
+            else:
+                continue
+            bridge_cell[x, y] = True
+            bridge_data[x, y] = k + 1
 
 
 def blob(cx, cy, r):
@@ -538,9 +636,10 @@ for cx, cy, kind in fields:
 
 # ore density: fuller in the middle of a field, as FinalAlert does it
 odata = np.zeros((N, N), int)
-has = overlay != 255
+has = (overlay != 255) & ~bridge_cell
 cnt = sum(shift(has.astype(int), dx, dy, 0) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy)
 odata[has] = np.clip(cnt[has] + 3, 3, 11)
+odata[bridge_cell] = bridge_data[bridge_cell]
 
 # --- trees ------------------------------------------------------------------------------
 p = tree_p.copy()
@@ -568,7 +667,9 @@ def hexrgb(h):
 
 def cell_color(rx, ry):
     col = hexrgb(TS[int(tile[rx, ry])]['tiles'][int(sub[rx, ry])]['color'])
-    if overlay[rx, ry] != 255:
+    if bridge_cell[rx, ry]:
+        col = hexrgb('9A968C')
+    elif overlay[rx, ry] != 255:
         col = hexrgb('8C7AE6') if overlay[rx, ry] < 100 else hexrgb('D9B13B')
     elif (ry * 1000 + rx) in terrain:
         col = col * 0.55
@@ -673,7 +774,9 @@ def report():
     print('cells', len(CELLS), 'levels', np.bincount(level[VALID]))
     print('ramps', int((VALID & (ramp > 0)).sum()), 'flat', int(flat.sum()), 'water+shore', int((water_cell & VALID).sum()))
     print('trees', len(terrain), 'ore cells', int(((overlay >= 100) & (overlay != 255)).sum()),
-          'gem cells', int((overlay < 100).sum()), 'structures', len(structures))
+          'gem cells', int(((overlay < 100) & ~bridge_cell).sum()), 'structures', len(structures))
+    for name, axis, cell, a, b in bridge_plans:
+        print(f'  bridge {name:16s} {cell(a, 0)} -> {cell(b, 0)} along {"ry" if axis else "rx"}, {b - a - 1} cells of deck')
     for zone, n, k in civ_stats:
         print(f'  civilians {zone:34s} cells={n:5d} placed={k}')
     for (name, *_), (x, y) in zip(cfg.STARTS, start_cells):
@@ -687,7 +790,7 @@ if __name__ == '__main__':
     open(os.path.join(OUT, cfg.OUTFILE), 'w', newline='').write(ini)
     Image.fromarray(prev).resize((4 * W, 2 * H), Image.NEAREST).save(os.path.join(OUT, 'preview_small.png'))
     np.savez(os.path.join(OUT, 'state.npz'), heights=heights, level=level, ramp=ramp, tile=tile, sub=sub,
-             overlay=overlay, valid=VALID, cover=cover)
+             overlay=overlay, valid=VALID, cover=cover, bridge=bridge_cell)
     json.dump({'terrain': terrain, 'structures': structures, 'starts': start_cells,
                'names': [s[0] for s in cfg.STARTS], 'W': W, 'H': H, 'local': [LX, LY, LW, LH],
                'theater': THEATER},

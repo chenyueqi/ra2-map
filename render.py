@@ -32,7 +32,9 @@ for rx, ry in cells:
     col = np.array([int(TS[t]['tiles'][int(sub[rx, ry])]['color'][i:i + 2], 16) for i in (0, 2, 4)], float)
     c = [h[rx, ry], h[rx + 1, ry], h[rx + 1, ry + 1], h[rx, ry + 1]]
     shade = 1.0 + 0.16 * ((c[2] + c[1]) - (c[0] + c[3])) + 0.025 * level[rx, ry]
-    if overlay[rx, ry] != 255:
+    if 'bridge' in st and st['bridge'][rx, ry]:
+        col = np.array([150, 146, 136.])
+    elif overlay[rx, ry] != 255:
         col = np.array([140, 122, 230.]) if overlay[rx, ry] < 100 else np.array([222, 180, 50.])
     col = tuple(int(v) for v in np.clip(col * shade, 0, 255))
     poly = [pt(rx, ry), pt(rx + 1, ry), pt(rx + 1, ry + 1), pt(rx, ry + 1)]

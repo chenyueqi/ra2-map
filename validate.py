@@ -48,7 +48,10 @@ for i, b in enumerate(ov):
     if b != 255:
         x, y = i % 512, i // 512
         assert (x, y) in cells and cells[(x, y)][0] not in range(29, 49), (x, y)
-        assert 1 <= od[i] <= 11
+        if 74 <= b <= 98:                      # low bridge: data is the cell's place across the 3-wide deck
+            assert od[i] <= 2 and b in (74, 75, 76, 77, 83, 84, 85, 86, 92, 94, 96, 98), (x, y, b)
+        else:
+            assert 1 <= od[i] <= 11
         ovc[b] += 1
 print('overlays', dict(ovc))
 trees = {}
