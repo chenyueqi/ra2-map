@@ -13,7 +13,7 @@ DEM_DIR, DEM_ZOOM = 'data/dem_jiangsu', 8
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 1, 4, 1
 ELEV_PTS = [0, 45, 80, 130, 200, 280, 380, 520, 700, 1000]
 LVL_PTS = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8.5]
-LIGHTING = dict(Red=0.98, Green=0.99, Blue=0.99, Level=0.03, Ambient=1.02)
+LIGHTING = dict(Red=0.96, Green=1.01, Blue=0.99, Level=0.03, Ambient=1.03)
 
 STARTS = [  # 苏北 four, 苏南 four
     ('徐州', 117.20, 34.22),
@@ -104,7 +104,7 @@ LAKES = []
 LAKE_NAMES = {'Hongze Hu', 'Tai Hu', 'Gaoyou Hu', 'Shijiu Hu', 'Chao Hu', 'Weishan Hu', 'Ge Hu', 'Luoma Hu'}
 WATER_LEVEL = 0
 MIN_WATER_CORNERS, MIN_LAND_CORNERS = 6, 8
-MOUNTAIN_TREES = ['TREE25', 'TREE26', 'TREE27', 'TREE05', 'TREE06', 'TREE07', 'TREE08', 'TREE15']
+MOUNTAIN_TREES = ['TREE01', 'TREE02', 'TREE03', 'TREE04', 'TREE10', 'TREE11', 'TREE12', 'TREE17']   # evergreen broadleaf and bamboo hills: the valley set, not the Rockies set
 VALLEY_TREES = ['TREE01', 'TREE02', 'TREE03', 'TREE04', 'TREE10', 'TREE11', 'TREE12', 'TREE17']
 
 
@@ -127,17 +127,19 @@ def ground_cover(g):
         near_water = near_water | g.shift(near_water, 1, 0, False) | g.shift(near_water, -1, 0, False) | \
             g.shift(near_water, 0, 1, False) | g.shift(near_water, 0, -1, False)
     coast = near_water & plain & (lon > 119.6) & ((lat > 32.3) | (lon > 121.2))   # 盐城 tidal flats, 崇明
-    subei = plain & (lat > 33.0)
+    subei = plain & (lat > 33.4)
     lixiahe = plain & (lat > 32.5) & (lat <= 33.4) & (lon > 119.4)                  # 里下河 lowland
     south = hills & (lat < 31.9)                                                     # 宜溧 / 皖南 forest
 
-    cover[plain & (n1 > 0.55)] = g.THICK                          # rice and wheat
-    cover[subei & (n2 > 0.72)] = g.ROUGH                          # dry fields of the Huang-Huai plain
-    cover[lixiahe & (n1 > 0.4)] = g.THICK
+    jiangnan = plain & (lat <= 33.4)                               # south of the Huai line (苏北灌溉总渠): subtropical paddies
+    cover[jiangnan & (n1 > 0.32)] = g.THICK
+    cover[subei & (n1 > 0.6)] = g.THICK                           # winter wheat north of the Huai line
+    cover[subei & (n1 <= 0.6) & (n2 > 0.62)] = g.ROUGH            # dry fields of the Huang-Huai plain
     cover[coast & (n1 > 0.3)] = g.SAND
     cover[hills & (n2 > 0.6)] = g.ROUGH
     p[plain] = 0.01
-    p[lixiahe] = 0.02
+    p[jiangnan] = 0.02
+    p[lixiahe] = 0.025
     p[hills] = 0.1
     p[south] = 0.2 + 0.3 * (1 - n1[south])
     p[coast] = 0.003

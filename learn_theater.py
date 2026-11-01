@@ -9,7 +9,7 @@ PAT = {0:(0,0,0,0),1:(0,1,1,0),2:(0,0,1,1),3:(1,0,0,1),4:(1,1,0,0),5:(0,0,1,0),6
        17:(0,1,0,1),18:(1,0,1,0),19:(0,1,0,1),20:(1,0,1,0)}
 OFF = [(0,0),(1,0),(1,1),(0,1)]
 N4 = [(0,-1),(1,0),(0,1),(-1,0)]
-GROUND = {'Lat Grass','LAT Sand','Sand Individual','LAT Grass Rough','GrassRough Individual','LAT Grass, thick',
+GROUND = {'LAT Snow', 'LAT Grass', 'Clear/Rough LAT', 'LAT SnowyRock', 'Rock/Clear LAT', 'Pavement/Clear LAT', 'Lat Grass','LAT Sand','Sand Individual','LAT Grass Rough','GrassRough Individual','LAT Grass, thick',
           'GrassThick Idividual','Pavement','LAT Pavement','Pavement Individual'}
 maps = []
 for p in sorted(glob.glob('ref/maps/*.map')):
@@ -40,7 +40,7 @@ for p, cells in maps:
 bad = sum(n for r, c in obs.items() for o, n in c.items() if o != PAT[r]); tot = sum(sum(c.values()) for c in obs.values())
 print(f'ramps: {tot} fully observed ramp cells, {bad} disagree with the model;', {r: obs[r].most_common(1)[0] for r in sorted(obs)})
 # 2. LAT rule
-for base, lat in [(534,463),(131,132),(418,419),(493,494)]:
+for base, lat in set(tileset.GROUND[theater].values()):
     good = badl = 0
     for p, cells in maps:
         member = lambda t: t == base or lat <= t < lat+16

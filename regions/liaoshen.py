@@ -12,7 +12,8 @@ DEM_DIR, DEM_ZOOM = 'data/dem_liaoshen', 8
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 1, 4, 1
 ELEV_PTS = [0, 40, 90, 150, 300, 420, 540, 680, 850, 1100]
 LVL_PTS = [0, 0, 1, 2, 2.4, 4, 5, 6, 7, 8.5]   # the Songliao divide (150-300 m) stays one plateau
-LIGHTING = dict(Red=1.02, Green=0.98, Blue=0.93, Level=0.03, Ambient=1.0)   # late autumn, sorghum harvested
+THEATER = 'SNOW'   # the campaign ended on 2 Nov 1948; Manchuria already had its first snow
+LIGHTING = dict(Red=0.98, Green=0.98, Blue=1.03, Level=0.03, Ambient=1.0)
 
 STARTS = [  # the battle's eight fronts
     ('长春', 125.32, 43.88),       # 围困长春 (郑洞国)
@@ -98,10 +99,10 @@ def ground_cover(g):
     west = hills & (lon < 122.3)                                                    # 辽西 bare loess hills
     riparian = (g.RIVER_D < 1.3) & plain
 
-    cover[plain & (n1 > 0.5)] = g.THICK                       # harvested sorghum and soybean
-    cover[plain & (lat > 43.0) & (n2 > 0.7)] = g.ROUGH        # 科尔沁 sandy steppe edge
-    cover[west & (n2 > 0.45)] = g.ROUGH
-    cover[reeds & (n1 > 0.25)] = g.SAND
+    cover[plain & (n1 > 0.5)] = g.THICK                       # first thin snow: sorghum stubble shows through
+    cover[plain & (lat > 43.0) & (n2 > 0.6)] = g.THICK        # 科尔沁 steppe edge, wind-blown
+    cover[west & (n2 > 0.45)] = g.ROUGH                       # snowy rock on the bare Liaoxi hills
+    cover[reeds & (n1 > 0.25)] = g.SAND                       # frozen 盘锦 reed marsh
     p[plain] = 0.008
     p[riparian] = 0.08
     p[west] = 0.03

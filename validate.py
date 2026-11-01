@@ -7,7 +7,7 @@ raw = open(path, 'rb').read()
 assert b'\r\n' in raw and raw.count(b'\n') == raw.count(b'\r\n'), 'line endings'
 s = sections(path)
 THEATER = s['Map']['Theater']
-T = tileset.load({'TEMPERATE': 'ref/temperat.yaml', 'URBAN': 'ref/urban.yaml'}[THEATER])
+T = tileset.load('ref/' + tileset.THEATER_FILES[THEATER])
 print('theater', THEATER)
 W, H = map(int, s['Map']['Size'].split(',')[2:])
 iso = C.unpack(C.from_ini_section(s['IsoMapPack5'].values()), 5)
@@ -33,7 +33,7 @@ print('corner conflicts', sum(len(v) > 1 for v in corner.values()))
 # LAT rule
 N4 = [(0,-1),(1,0),(0,1),(-1,0)]
 bad = 0
-for base, lat in [(534,463),(131,132),(418,419),(493,494)]:
+for base, lat in set(tileset.GROUND[THEATER].values()):
     member = lambda t: t == base or lat <= t < lat + 16
     for (x, y), (t, st, z) in cells.items():
         if lat <= t < lat + 16 or t == base:

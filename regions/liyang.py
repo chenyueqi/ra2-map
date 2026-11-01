@@ -13,7 +13,7 @@ DEM_DIR, DEM_ZOOM = 'data/dem_liyang', 10
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 2, 7, 3
 ELEV_PTS = [0, 22, 45, 80, 125, 180, 250, 330, 430, 560]
 LVL_PTS = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8.2]
-LIGHTING = dict(Red=0.98, Green=1.0, Blue=0.97, Level=0.03, Ambient=1.02)
+LIGHTING = dict(Red=0.95, Green=1.02, Blue=0.98, Level=0.03, Ambient=1.03)   # humid subtropical green
 
 STARTS = [
     ('上兴', 119.24, 31.55),
@@ -56,7 +56,7 @@ WATER_LEVEL = 0
 MIN_WATER_CORNERS, MIN_LAND_CORNERS = 4, 4
 LAKES_BIG = {'长荡湖', '方便水库'}
 LAKES_NARROW = {'沙河水库（天目湖）', '大溪水库', '横山水库'}   # widened a little to stay visible at 650 m a cell
-MOUNTAIN_TREES = ['TREE25', 'TREE26', 'TREE27', 'TREE05', 'TREE06', 'TREE07', 'TREE08', 'TREE15']
+MOUNTAIN_TREES = ['TREE01', 'TREE02', 'TREE03', 'TREE04', 'TREE10', 'TREE11', 'TREE12', 'TREE17']   # evergreen broadleaf and bamboo hills: the valley set, not the Rockies set
 VALLEY_TREES = ['TREE01', 'TREE02', 'TREE03', 'TREE04', 'TREE10', 'TREE11', 'TREE12', 'TREE17']
 
 
@@ -75,11 +75,11 @@ def ground_cover(g):
     wawu = hills & (lat > 31.5) & (lon < 119.36)                # 瓦屋山 / 茅山 foothills
     riparian = (g.RIVER_D < 1.2) & plain
 
-    cover[plain & (n1 > 0.58)] = g.THICK                        # rice paddies
-    cover[plain & (n2 > 0.8) & (n1 <= 0.58)] = g.ROUGH          # threshing grounds, fish-pond dikes
+    cover[plain & (n1 > 0.32)] = g.THICK                        # rice paddies almost everywhere on the plain
     cover[hills & (E < 120) & (n2 > 0.55)] = g.THICK            # tea gardens on the lower slopes (白茶)
     cover[hills & (E >= 250) & (n1 > 0.6)] = g.ROUGH            # bare ridge tops
-    p[hills] = 0.05
+    p[plain] = 0.025                                            # village bamboo groves
+    p[hills] = 0.08
     p[bamboo] = 0.22 + 0.3 * (1 - n1[bamboo])
     p[wawu] = 0.12 + 0.2 * (1 - n1[wawu])
     p[riparian] = 0.18

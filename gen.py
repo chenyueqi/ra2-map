@@ -24,7 +24,7 @@ OUT = os.path.join(HERE, 'out', REGION)
 os.makedirs(OUT, exist_ok=True)
 rng = np.random.default_rng(cfg.SEED)
 THEATER = getattr(cfg, 'THEATER', 'TEMPERATE')
-TS = tileset.load(os.path.join(HERE, 'ref', {'TEMPERATE': 'temperat.yaml', 'URBAN': 'urban.yaml'}[THEATER]))
+TS = tileset.load(os.path.join(HERE, 'ref', tileset.THEATER_FILES[THEATER]))
 
 # --- map geometry --------------------------------------------------------------
 W, H = cfg.W, cfg.H
@@ -417,8 +417,9 @@ RIVER_D = polyline_distance(river_lines) if river_lines else np.full((N, N), np.
 ROAD_D = polyline_distance(cfg.ROADS.values())
 
 # --- ground cover -------------------------------------------------------------------
-GRASS, THICK, ROUGH, SAND, PAVE = 0, 131, 418, 493, 534
-LAT_START = {THICK: 132, ROUGH: 419, SAND: 494, PAVE: 463}
+GRASS = 0
+THICK, ROUGH, SAND, PAVE = (tileset.GROUND[THEATER][k][0] for k in ('THICK', 'ROUGH', 'SAND', 'PAVE'))
+LAT_START = dict(tileset.GROUND[THEATER].values())
 
 cover, mountain, tree_p = cfg.ground_cover(g)
 city = np.zeros((N, N), bool)

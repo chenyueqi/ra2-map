@@ -14,7 +14,8 @@ DEM_DIR, DEM_ZOOM = 'data/dem_huaihai', 9
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 1, 5, 2
 ELEV_PTS = [0, 60, 90, 130, 180, 240, 310, 400, 500, 650]   # the whole Huang-Huai plain (15-60 m) is one level
 LVL_PTS = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8.5]
-LIGHTING = dict(Red=0.95, Green=0.97, Blue=1.03, Level=0.03, Ambient=1.0)   # winter
+THEATER = 'SNOW'   # the Chenguanzhuang siege was fought in weeks of heavy snow (Dec 1948 - Jan 1949)
+LIGHTING = dict(Red=0.96, Green=0.98, Blue=1.04, Level=0.03, Ambient=1.0)
 
 STARTS = [  # 北线 four, 南线 four
     ('商丘', 115.65, 34.42),       # 孙元良 / 中原野战军
@@ -83,9 +84,9 @@ def ground_cover(g):
     plain = ~hills
     riparian = (g.RIVER_D < 1.2) & plain
 
-    cover[plain & (n1 > 0.45)] = g.ROUGH                      # bare winter fields, frozen
-    cover[plain & (n1 <= 0.45) & (n2 > 0.6)] = g.THICK        # winter wheat
-    cover[hills & (n2 > 0.5)] = g.ROUGH
+    cover[plain & (n1 > 0.64)] = g.THICK                      # frozen fields where the snow is trampled or blown off
+    cover[riparian & (n2 > 0.5)] = g.THICK                    # dry reeds along the 浍河 / 濉河 banks
+    cover[hills & (n2 > 0.45)] = g.ROUGH                      # snowy rock on the Xuzhou hills
     p[plain] = 0.006
     p[riparian] = 0.06
     p[hills] = 0.08                                           # the Xuzhou hills, 芒砀山, 皇藏峪

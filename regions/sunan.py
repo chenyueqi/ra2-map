@@ -13,7 +13,7 @@ DEM_DIR, DEM_ZOOM = 'data/dem_sunan', 9
 BLUR_SMOOTH, BLUR_WIDE, BLUR_TERRAIN = 1, 5, 2
 ELEV_PTS = [0, 15, 40, 80, 130, 190, 260, 350, 470, 650]
 LVL_PTS = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8.5]
-LIGHTING = dict(Red=0.97, Green=0.99, Blue=1.0, Level=0.03, Ambient=1.02)
+LIGHTING = dict(Red=0.95, Green=1.02, Blue=0.99, Level=0.03, Ambient=1.03)   # humid subtropical green
 
 STARTS = [
     ('南京', 118.85, 31.90),
@@ -90,7 +90,7 @@ WATER_HALF_WIDTH = 1.3
 LAKES = []
 WATER_LEVEL = 0
 MIN_WATER_CORNERS, MIN_LAND_CORNERS = 6, 8
-MOUNTAIN_TREES = ['TREE25', 'TREE26', 'TREE27', 'TREE05', 'TREE06', 'TREE07', 'TREE08', 'TREE15']
+MOUNTAIN_TREES = ['TREE01', 'TREE02', 'TREE03', 'TREE04', 'TREE10', 'TREE11', 'TREE12', 'TREE17']   # evergreen broadleaf and bamboo hills: the valley set, not the Rockies set
 VALLEY_TREES = ['TREE01', 'TREE02', 'TREE03', 'TREE04', 'TREE10', 'TREE11', 'TREE12', 'TREE17']
 
 
@@ -114,11 +114,11 @@ def ground_cover(g):
     bamboo = hills & (lat < 31.45)                               # 宜溧山区 bamboo and tea
     ningzhen = hills & (lat >= 31.45)                            # 宁镇山脉, 茅山
 
-    cover[plain & (n1 > 0.55)] = g.THICK                         # rice paddies and mulberry fields
-    cover[plain & (n2 > 0.8) & (n1 <= 0.55)] = g.ROUGH           # fish-pond dikes
+    cover[plain & (n1 > 0.32)] = g.THICK                         # rice paddies and mulberry fields
     cover[coast & (n1 > 0.35)] = g.SAND                          # tidal flats of Chongming and the Pudong coast
     cover[hills & (E < 100) & (n2 > 0.55)] = g.THICK             # tea gardens
-    p[plain] = 0.012
+    p[plain] = 0.022                                             # village groves
+    p[near_water & plain] = 0.05                                 # trees along the lake shores and canals
     p[hills] = 0.08
     p[bamboo] = 0.2 + 0.3 * (1 - n1[bamboo])
     p[ningzhen] = 0.12 + 0.2 * (1 - n1[ningzhen])

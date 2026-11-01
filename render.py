@@ -13,7 +13,7 @@ S = int(sys.argv[2]) if len(sys.argv) > 2 else 8          # half cell width in p
 st = np.load(os.path.join(OUT, 'state.npz'))
 obj = json.load(open(os.path.join(OUT, 'objects.json')))
 TS = tileset.load(os.path.join(os.path.dirname(__file__), 'ref',
-                               {'TEMPERATE': 'temperat.yaml', 'URBAN': 'urban.yaml'}[obj.get('theater', 'TEMPERATE')]))
+                               tileset.THEATER_FILES[obj.get('theater', 'TEMPERATE')]))
 h, level, tile, sub, overlay, valid = st['heights'], st['level'], st['tile'], st['sub'], st['overlay'], st['valid']
 W, H = obj['W'], obj['H']
 LX, LY, LW, LH = obj['local']

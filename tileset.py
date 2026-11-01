@@ -16,3 +16,13 @@ def load(path='ref/temperat.yaml'):
                                           color=props.get('MinColor'), color2=props.get('MaxColor'))
         out[tid] = dict(cat=cat, size=size, tiles=tiles)
     return out
+
+
+THEATER_FILES = {'TEMPERATE': 'temperat.yaml', 'URBAN': 'urban.yaml', 'SNOW': 'snow.yaml'}
+# ground covers as (base tile, first of its 16 LAT transition tiles); checked against real maps with learn_theater.py
+_TEM = dict(THICK=(131, 132), ROUGH=(418, 419), SAND=(493, 494), PAVE=(534, 463))
+GROUND = {'TEMPERATE': _TEM, 'URBAN': _TEM,
+          'SNOW': dict(THICK=(131, 132),        # bare grass showing through the snow (fields, reeds)
+                       ROUGH=(696, 697),        # snowy rock
+                       SAND=(131, 132),         # no beach sand under snow: frozen grass
+                       PAVE=(734, 749))}

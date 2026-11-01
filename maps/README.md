@@ -1,17 +1,17 @@
 # 地图下载
 
-把 `.mpr` 文件放进红色警戒 2 / 尤里的复仇的游戏目录，在遭遇战或多人游戏的地图列表里就能找到。所有地图都是 8 人图，温带地形。
+把 `.mpr` 文件放进红色警戒 2 / 尤里的复仇的游戏目录，在遭遇战或多人游戏的地图列表里就能找到。所有地图都是 8 人图。
 
-| 文件 | 地图 | 出生点 |
-|---|---|---|
-| [liyang.mpr](liyang.mpr) | 溧阳 | 上兴、社头、上黄、芳庄、戴埠、南山竹海、社渚、桠溪 |
-| [sunan.mpr](sunan.mpr) | 苏南+上海，长江上有 10 座真实位置的大桥 | 南京、镇江、常州、无锡、苏州、上海、溧阳、南通 |
-| [jiangsu.mpr](jiangsu.mpr) | 江苏，长江上有 17 座真实位置的大桥 | 苏北：徐州、连云港、淮安、盐城；苏南：南京、镇江、无锡、苏州 |
-| [liaoshen.mpr](liaoshen.mpr) | 辽沈战役 (1948) | 长春、四平、沈阳、营口、黑山、义县、锦州、锦西·塔山 |
-| [huaihai.mpr](huaihai.mpr) | 淮海战役 (1948-49) | 商丘、陈官庄、徐州、碾庄、新安镇、宿县、双堆集、蚌埠 |
-| [kursk.mpr](kursk.mpr) | 库尔斯克战役 (1943) | 奥廖尔、波内里、库尔斯克、雷利斯克、旧奥斯科尔、奥博扬、普罗霍罗夫卡、别尔哥罗德 |
-| [hohhot.mpr](hohhot.mpr) | 呼和浩特 | |
-| [colorado.mpr](colorado.mpr) | Colorado | |
-| [bayarea.mpr](bayarea.mpr) | San Francisco Bay Area（城市地形） | |
+| 文件 | 地图 | 游戏地形 | 出生点 |
+|---|---|---|---|
+| [liyang.mpr](liyang.mpr) | 溧阳 | 温带，按江南湿润气候调色 | 上兴、社头、上黄、芳庄、戴埠、南山竹海、社渚、桠溪 |
+| [sunan.mpr](sunan.mpr) | 苏南+上海，长江上有 10 座真实位置的大桥 | 温带，按江南湿润气候调色 | 南京、镇江、常州、无锡、苏州、上海、溧阳、南通 |
+| [jiangsu.mpr](jiangsu.mpr) | 江苏，长江上有 17 座真实位置的大桥 | 温带，淮河以南是水田，以北是旱地 | 苏北：徐州、连云港、淮安、盐城；苏南：南京、镇江、无锡、苏州 |
+| [liaoshen.mpr](liaoshen.mpr) | 辽沈战役 (1948) | 雪地（初雪） | 长春、四平、沈阳、营口、黑山、义县、锦州、锦西·塔山 |
+| [huaihai.mpr](huaihai.mpr) | 淮海战役 (1948-49) | 雪地 | 商丘、陈官庄、徐州、碾庄、新安镇、宿县、双堆集、蚌埠 |
+| [kursk.mpr](kursk.mpr) | 库尔斯克战役 (1943) | 温带（夏季） | 奥廖尔、波内里、库尔斯克、雷利斯克、旧奥斯科尔、奥博扬、普罗霍罗夫卡、别尔哥罗德 |
+| [hohhot.mpr](hohhot.mpr) | 呼和浩特 | 温带 | |
+| [colorado.mpr](colorado.mpr) | Colorado | 温带 | |
+| [bayarea.mpr](bayarea.mpr) | San Francisco Bay Area | 城市 | |
 
 这些文件由 `python3 gen.py <region>` 生成。
