@@ -10,6 +10,10 @@
 | [liaoshen.mpr](liaoshen.mpr) | 辽沈战役 (1948) | 雪地（初雪） | 长春、四平、沈阳、营口、黑山、义县、锦州、锦西·塔山 |
 | [huaihai.mpr](huaihai.mpr) | 淮海战役 (1948-49) | 雪地 | 商丘、陈官庄、徐州、碾庄、新安镇、宿县、双堆集、蚌埠 |
 | [kursk.mpr](kursk.mpr) | 库尔斯克战役 (1943) | 温带（夏季） | 奥廖尔、波内里、库尔斯克、雷利斯克、旧奥斯科尔、奥博扬、普罗霍罗夫卡、别尔哥罗德 |
+| [taiyuan.mpr](taiyuan.mpr) | 太原战役 (1948–49)，盆地四周是悬崖高原，只能走四个关口 | 温带（春） | 太原、阳曲、忻州、寿阳、榆次、太谷、平遥、文水 |
+| [ardennes.mpr](ardennes.mpr) | 突出部战役 (1944) | 雪地 | 埃尔森博恩岭、圣维特、普吕姆、克莱沃、埃特尔布吕克、巴斯托涅、马尔什、迪南（默兹河西岸） |
+| [verdun.mpr](verdun.mpr) | 凡尔登战役 (1916) | 温带 | 凡尔登、杜奥蒙堡、304 高地、蒙福孔、当维莱、埃坦、圣米耶勒、苏伊利 |
+| [gettysburg.mpr](gettysburg.mpr) | 葛底斯堡战役 (1863) | 温带（盛夏） | 卡什敦、橡树山、海德斯堡路、卡尔普山、东骑兵战场、两酒馆、圆顶山、神学院岭 |
 | [hohhot.mpr](hohhot.mpr) | 呼和浩特 | 温带 | |
 | [colorado.mpr](colorado.mpr) | Colorado，落基山是悬崖高原，只能走 I-70、北线（Trail Ridge Road）、南线（US-160）三条峡谷过山 | 温带 | 东：Boulder、Colorado Springs、Sterling、Lamar；西：Grand Junction、Durango、Steamboat Springs；圣路易斯谷：Alamosa |
 | [bayarea.mpr](bayarea.mpr) | San Francisco Bay Area | 城市 | |
