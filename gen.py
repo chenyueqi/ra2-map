@@ -258,8 +258,38 @@ def build_water():
 
 build_water()
 
+# --- mountains: a plateau ringed by cliffs, reachable only through the passes the region leaves open -------
+# The region's plateau(g) gives the mountain mask and the cells that must stay low (passes, towns). cliffs.py
+# lays official cliff pieces along its edge; the low land and the plateau then get separate height fields
+# that meet only at the cliffs (foot = CLIFF_FOOT, top = CLIFF_FOOT + 4).
+high = np.zeros((N, N), bool)           # on top of the cliffs (flat ground or plateau slopes)
+cliff_cell = np.zeros((N, N), bool)
+cliff_tok = {}
+if hasattr(cfg, 'plateau'):
+    import cliffs
+    assert THEATER == 'TEMPERATE', 'cliff rules are learned from temperate maps'
+    _target, _keep_low, _keep_high = cfg.plateau(g)
+    _target, _sol = cliffs.layout(_target & VALID, VALID, np.random.default_rng(cfg.SEED + 1), keep_low=_keep_low,
+                                  keep_high=_keep_high, log=lambda m: None)
+    high = _target.copy()
+    for (_x, _y), _t in _sol.items():
+        if _t in 'LH':
+            high[_x, _y] = _t == 'H'
+        else:
+            cliff_tok[(_x, _y)] = _t
+            cliff_cell[_x, _y] = True
+            high[_x, _y] = False
+    high &= VALID
+
 # --- flatten building ground ------------------------------------------------------
 lock = np.full((N, N), np.nan)
+if cliff_cell.any():                    # low ground at the foot of the cliffs is level
+    _near = cliff_cell | high
+    for _ in range(2):
+        _near = _near | shift(_near, 1, 0, False) | shift(_near, -1, 0, False) | shift(_near, 0, 1, False) | \
+            shift(_near, 0, -1, False)
+    for _x, _y in zip(*np.nonzero(_near & VALID & ~cliff_cell & ~high)):
+        lock[_x:_x + 2, _y:_y + 2] = cfg.CLIFF_FOOT
 if water_cell.any():
     wet_corner = np.zeros((N, N), bool)
     for dx in (0, 1):
@@ -367,10 +397,52 @@ for _, _, lon, lat, w, h in getattr(cfg, 'LANDMARKS', []):
 for _, lon, lat, r in getattr(cfg, 'FLAT_CITIES', []):    # real cities sit on level ground
     lock_disc(lon, lat, r)
 
+# railways: RA2 has no track tiles, so a line is a strip of pavement (ballast) with telegraph poles beside it.
+# TRACKS are roads drawn the same way without poles, in the ground cover TRACK_COVER (e.g. 'SAND' = dirt).
+# The bed is graded: its corners take the height averaged along the line, so it runs level and changes
+# level in single steps instead of following every swell of the ground.
+RAILWAYS = getattr(cfg, 'RAILWAYS', {})
+TRACKS = getattr(cfg, 'TRACKS', {})
+_none = np.zeros((N, N), bool)
+track = (polyline_distance(TRACKS.values()) < 0.75) & VALID & ~water_cell if TRACKS else _none
+rail = (polyline_distance(RAILWAYS.values()) < 0.75) & VALID & ~water_cell if RAILWAYS else _none
+track &= ~rail
+rail = rail | track                     # every strip: graded, kept clear; `track` marks the ones without poles
+if rail.any():
+    rail_corner = np.zeros((N, N), bool)
+    for dx in (0, 1):
+        for dy in (0, 1):
+            rail_corner |= shift(rail, -dx, -dy, False)
+    rail_corner &= np.isnan(lock)
+    rc = np.argwhere(rail_corner)
+    upper = relax_min(np.where(np.isnan(lock), np.inf, lock))
+    lower = -relax_min(np.where(np.isnan(lock), np.inf, -lock))
+    grade = np.empty(len(rc))
+    for i in range(0, len(rc), 500):
+        d = np.hypot(*(rc[i:i + 500, None, :] - rc[None, :, :]).transpose(2, 0, 1))
+        w = d <= 5
+        grade[i:i + 500] = (w * heights[rc[:, 0], rc[:, 1]]).sum(1) / w.sum(1)
+    x, y = rc[:, 0], rc[:, 1]
+    lock[x, y] = np.clip(np.round(grade), lower[x, y], upper[x, y])
+
 upper = relax_min(np.where(np.isnan(lock), np.inf, lock))
 lower = -relax_min(np.where(np.isnan(lock), np.inf, -lock))
 assert (lower <= upper).all(), 'flattened areas too close for their level difference'
 heights = np.clip(heights, lower, upper).astype(int)
+heights_high = heights
+if high.any():                          # plateau: CLIFF_FOOT + 4 along the rim, rising inland with the real relief
+    top = cfg.CLIFF_FOOT + 4
+    a = np.round(np.interp(ELEV_CORNER, cfg.PLATEAU_ELEV_PTS, cfg.PLATEAU_LVL_PTS))
+    core = high.copy()                  # plateau cells with no cliff or low ground around them (8 neighbours)
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            core &= shift(high, dx, dy, False)
+    inner = np.ones((N, N), bool)       # corners whose four cells are all core: free to rise
+    for dx in (0, 1):
+        for dy in (0, 1):
+            inner &= shift(core, -dx, -dy, False)
+    a = np.where(inner, np.maximum(a, top), top)
+    heights_high = relax_min(a).astype(int)
 
 # --- cells: level + ramp ------------------------------------------------------------
 RAMP_OF = {(0, 0, 0, 0): 0, (0, 1, 1, 0): 1, (0, 0, 1, 1): 2, (1, 0, 0, 1): 3, (1, 1, 0, 0): 4,
@@ -382,13 +454,19 @@ RAMP_TILE0 = 28  # slope01.tem (ramp type 1) is tile 29
 
 level = np.zeros((N, N), int)
 ramp = np.zeros((N, N), int)
+corners = np.zeros((N, N, 4), int)      # corner heights of every cell (top, right, bottom, left)
 for rx, ry in CELLS:
-    c = (heights[rx, ry], heights[rx + 1, ry], heights[rx + 1, ry + 1], heights[rx, ry + 1])
+    if cliff_cell[rx, ry]:
+        z = cfg.CLIFF_FOOT + cliffs.HEIGHT[cliff_tok[(rx, ry)]]
+        level[rx, ry], corners[rx, ry] = z, z
+        continue
+    hf = heights_high if high[rx, ry] else heights
+    c = (hf[rx, ry], hf[rx + 1, ry], hf[rx + 1, ry + 1], hf[rx, ry + 1])
     z = min(c)
-    level[rx, ry] = z
+    level[rx, ry], corners[rx, ry] = z, c
     ramp[rx, ry] = RAMP_OF[tuple(v - z for v in c)]
 assert not (water_cell & VALID & (ramp > 0)).any(), 'water must be flat'
-flat = VALID & (ramp == 0)
+flat = VALID & (ramp == 0) & ~cliff_cell
 
 # --- noise --------------------------------------------------------------------------
 
@@ -430,6 +508,8 @@ if hasattr(cfg, 'urban_mask'):           # whole built-up area, not just the cit
 cover[city] = getattr(cfg, 'CITY_COVER', PAVE)
 if hasattr(cfg, 'city_cover'):          # e.g. plazas inside the city
     cfg.city_cover(g, cover, city)
+cover[rail] = PAVE
+cover[track] = tileset.GROUND[THEATER][getattr(cfg, 'TRACK_COVER', 'SAND')][0]
 cover[~flat | water_cell] = GRASS
 
 tile = np.zeros((N, N), int)
@@ -437,6 +517,9 @@ sub = np.zeros((N, N), int)
 for rx, ry in CELLS:
     if water_cell[rx, ry]:
         tile[rx, ry], sub[rx, ry] = fixed_tile[rx, ry], fixed_sub[rx, ry]
+        continue
+    if cliff_cell[rx, ry]:
+        tile[rx, ry], sub[rx, ry] = (int(v) for v in cliff_tok[(rx, ry)].split('.'))
         continue
     if not flat[rx, ry]:
         tile[rx, ry] = RAMP_TILE0 + ramp[rx, ry]
@@ -455,7 +538,7 @@ for rx, ry in CELLS:
 # --- overlays: ore & gems ---------------------------------------------------------------
 ORE, ORE_B, GEM, GEM_B = 102, 112, 27, 30
 overlay = np.full((N, N), 255)
-taken = np.zeros((N, N), bool)          # cells reserved by buildings / start areas
+taken = cliff_cell | high | rail        # cells reserved by buildings / start areas; the plateau is out of reach
 bridge_cell = np.zeros((N, N), bool)
 bridge_data = np.zeros((N, N), int)
 for name, axis, cell, a, b in bridge_plans:
@@ -485,6 +568,12 @@ fields = []                              # (center x, center y, kind) of every r
 
 def place_field(cx, cy, r, kind):
     m = blob(cx, cy, r) & flat & ~taken & VALID & ~water_cell
+    if rail.any():                      # a railway through the field: widen it to win back the track's cells
+        want = (blob(cx, cy, r) & flat & ~(taken & ~rail) & VALID & ~water_cell).sum()
+        for k in range(1, 8):
+            if m.sum() >= want:
+                break
+            m = blob(cx, cy, r * (1 + 0.06 * k)) & flat & ~taken & VALID & ~water_cell
     if m.any():
         fields.append((cx, cy, kind))
     if kind == 'ore':
@@ -645,11 +734,12 @@ odata[bridge_cell] = bridge_data[bridge_cell]
 # --- trees ------------------------------------------------------------------------------
 p = tree_p.copy()
 p[ROAD_D < 1.2] = 0
+p[high] = np.maximum(p[high], getattr(cfg, 'PLATEAU_TREES', 0))
 p[city & flat & ~water_cell] = 0.0
 p[~np.isnan(lock)] *= 0.15
 for sx, sy in start_cells:
     p[np.hypot(CX - sx, CY - sy) < cfg.START_FLAT + 1] = 0
-p[taken | (overlay != 255) | (shift((overlay != 255).astype(int), 1, 0, 0) > 0) |
+p[(taken & ~high) | (overlay != 255) | (shift((overlay != 255).astype(int), 1, 0, 0) > 0) |
   (shift((overlay != 255).astype(int), 0, 1, 0) > 0) | water_cell] = 0
 terrain = {}
 for rx, ry in CELLS:
@@ -658,6 +748,31 @@ for rx, ry in CELLS:
         terrain[ry * 1000 + rx] = trees[int(rng.integers(len(trees)))]
 terrain.update(props)
 terrain.update(drills)
+
+
+def place_poles(line, every=6, side=1.6):
+    """Telegraph poles along a railway, every `every` cells on one side of the track."""
+    pts = [to_iso(lon, lat) for lon, lat in line]
+    carry = every / 2
+    for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+        seg = math.hypot(bx - ax, by - ay)
+        ux, uy = (bx - ax) / seg, (by - ay) / seg
+        t = carry
+        while t < seg:
+            x, y = int(ax + ux * t - uy * side), int(ay + uy * t + ux * side)
+            if (0 < x < N - 1 and 0 < y < N - 1 and VALID[x, y] and in_local(x, y, 2) and flat[x, y]
+                    and not water_cell[x, y] and not taken[x, y] and not rail[x, y] and overlay[x, y] == 255
+                    and not city[x, y] and min(math.hypot(x - sx, y - sy) for sx, sy in start_cells) > cfg.START_FLAT
+                    and (y * 1000 + x) not in props and (y * 1000 + x) not in drills):
+                terrain[y * 1000 + x] = 'POLE01' if rng.random() < 0.5 else 'POLE02'
+                poles.append((x, y))
+            t += every
+        carry = t - seg
+
+
+poles = []
+for _line in RAILWAYS.values():
+    place_poles(_line)
 
 # --- preview ---------------------------------------------------------------------------
 
@@ -773,9 +888,14 @@ def build_ini():
 
 def report():
     print('cells', len(CELLS), 'levels', np.bincount(level[VALID]))
-    print('ramps', int((VALID & (ramp > 0)).sum()), 'flat', int(flat.sum()), 'water+shore', int((water_cell & VALID).sum()))
+    print('ramps', int((VALID & (ramp > 0)).sum()), 'flat', int(flat.sum()), 'water+shore', int((water_cell & VALID).sum()),
+          'cliff', int(cliff_cell.sum()), 'plateau', int(high.sum()))
     print('trees', len(terrain), 'ore cells', int(((overlay >= 100) & (overlay != 255)).sum()),
           'gem cells', int(((overlay < 100) & ~bridge_cell).sum()), 'structures', len(structures))
+    if RAILWAYS:
+        print('  railway cells', int((rail & ~track).sum()), 'on slopes', int((rail & ~track & ~flat).sum()), 'poles', len(poles))
+    if TRACKS:
+        print('  track cells', int(track.sum()), 'on slopes', int((track & ~flat).sum()))
     for name, axis, cell, a, b in bridge_plans:
         print(f'  bridge {name:16s} {cell(a, 0)} -> {cell(b, 0)} along {"ry" if axis else "rx"}, {b - a - 1} cells of deck')
     for zone, n, k in civ_stats:
@@ -790,8 +910,8 @@ if __name__ == '__main__':
     ini = build_ini()
     open(os.path.join(OUT, cfg.OUTFILE), 'w', newline='').write(ini)
     Image.fromarray(prev).resize((4 * W, 2 * H), Image.NEAREST).save(os.path.join(OUT, 'preview_small.png'))
-    np.savez(os.path.join(OUT, 'state.npz'), heights=heights, level=level, ramp=ramp, tile=tile, sub=sub,
-             overlay=overlay, valid=VALID, cover=cover, bridge=bridge_cell)
+    np.savez(os.path.join(OUT, 'state.npz'), heights=heights, corners=corners, level=level, ramp=ramp, tile=tile,
+             sub=sub, overlay=overlay, valid=VALID, cover=cover, bridge=bridge_cell, cliff=cliff_cell, high=high)
     json.dump({'terrain': terrain, 'structures': structures, 'starts': start_cells,
                'names': [s[0] for s in cfg.STARTS], 'W': W, 'H': H, 'local': [LX, LY, LW, LH],
                'theater': THEATER},

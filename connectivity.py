@@ -14,6 +14,23 @@ bridge = st['bridge'] if 'bridge' in st else np.zeros_like(valid)
 if os.environ.get('NOBRIDGE'):                  # which land is cut off when every bridge is down
     water, bridge = water | bridge, np.zeros_like(valid)
 land = valid & (~water | bridge) & (CX-CY > X0) & (CX-CY < X1) & (CX+CY > Y0) & (CX+CY <= Y1)
+land &= (tile < 49) | (tile > 88)              # cliff pieces are impassable
+def to_iso(lon, lat):
+    X = X0 + (lon - cfg.LON0)/(cfg.LON1 - cfg.LON0)*(X1 - X0); Y = Y0 + (lat - cfg.LAT0)/(cfg.LAT1 - cfg.LAT0)*(Y1 - Y0)
+    return (X+Y)/2, (Y-X)/2
+if os.environ.get('BLOCK'):                     # BLOCK=I-70,US-160: close those passes where they run between cliffs
+    cliffy = np.zeros_like(valid)
+    if 'cliff' in st:
+        cliffy = st['cliff'] | st['high']
+        for _ in range(int(cfg.PASS_HALF_WIDTH) + 3):     # the whole canyon floor
+            cliffy = cliffy | np.roll(cliffy, 1, 0) | np.roll(cliffy, -1, 0) | np.roll(cliffy, 1, 1) | np.roll(cliffy, -1, 1)
+    for name in os.environ['BLOCK'].split(','):
+        line = cfg.PASSES[name]
+        for (a, b), (c, d) in zip(line, line[1:]):
+            for k in range(41):
+                px, py = to_iso(a + (c - a) * k / 40, b + (d - b) * k / 40)
+                land &= ~((np.hypot(CX + 0.5 - px, CY + 0.5 - py) < cfg.PASS_HALF_WIDTH + 1.5) & cliffy)
+    print('blocked', os.environ['BLOCK'])
 import buildings
 CIV = buildings.load(obj.get('theater', 'TEMPERATE'))
 DIMS = {'CAOILD': (2, 2), 'CAAIRP': (3, 3), 'CAHOSP': (6, 4), 'CAOUTP': (4, 3)}
@@ -34,14 +51,11 @@ for s in zip(*np.nonzero(land)):
             a, b = x+dx, y+dy
             if land[a, b] and lab[a, b] < 0: lab[a, b] = len(sizes); stack.append((a, b))
     sizes.append(n)
-def to_iso(lon, lat):
-    X = X0 + (lon - cfg.LON0)/(cfg.LON1 - cfg.LON0)*(X1 - X0); Y = Y0 + (lat - cfg.LAT0)/(cfg.LAT1 - cfg.LAT0)*(Y1 - Y0)
-    return int((X+Y)/2), int((Y-X)/2)
 print(f'{conn}-connected land components >= 20 cells:', sorted([s for s in sizes if s >= 20], reverse=True))
 for name, (x, y) in zip(obj['names'], obj['starts']):
     print(f'  start {name:16s} comp {lab[x, y]}')
 for name, lon, lat in getattr(cfg, 'CHECK_POINTS', []):
-    x, y = to_iso(lon, lat); c = lab[x, y]
+    x, y = (int(v) for v in to_iso(lon, lat)); c = lab[x, y]
     print(f'  {name:22s} comp {c}' + ('' if c >= 0 else ' (water/shore)'))
 print('component sizes by label:', {i: s for i, s in enumerate(sizes) if s >= 20})
 if len(sys.argv) > 3:

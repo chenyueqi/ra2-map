@@ -25,11 +25,46 @@ print('cells ok', len(cells))
 PAT = {0:(0,0,0,0),1:(0,1,1,0),2:(0,0,1,1),3:(1,0,0,1),4:(1,1,0,0),5:(0,0,1,0),6:(0,0,0,1),7:(1,0,0,0),8:(0,1,0,0),
        9:(0,1,1,1),10:(1,0,1,1),11:(1,1,0,1),12:(1,1,1,0),13:(0,1,2,1),14:(1,0,1,2),15:(2,1,0,1),16:(1,2,1,0),
        17:(0,1,0,1),18:(1,0,1,0),19:(0,1,0,1),20:(1,0,1,0)}
+CLIFF = {t for t in T if T[t]['cat'] == 'Cliff Set'}
 corner = collections.defaultdict(set)
 for (x, y), (t, st, z) in cells.items():
+    if t in CLIFF:                             # a cliff piece is a drawn wall, not a slope: no shared corners
+        continue
     for (ox, oy), d in zip([(0,0),(1,0),(1,1),(0,1)], PAT[T[t]['tiles'][st]['ramp']]):
         corner[(x + ox, y + oy)].add(z + d)
 print('corner conflicts', sum(len(v) > 1 for v in corner.values()))
+if any(t in CLIFF for t, _, _ in cells.values()):
+    # every pair of neighbouring cells around a cliff must be one seen in the official maps (cliff_rules.json)
+    import json
+    rules = json.load(open('cliff_rules.json'))
+    allowed = [set(map(tuple, p)) | {('L', 'L'), ('H', 'H')} for p in rules['pairs']]
+    feet = collections.Counter(z - T[t]['tiles'][st]['height'] for t, st, z in cells.values() if t in CLIFF)
+    assert len(feet) == 1, ('cliffs on more than one level', feet)
+    foot = next(iter(feet))
+
+    def token(c):
+        t, st, z = cells[c]
+        if t in CLIFF:
+            return f'{t}.{st}'
+        return {foot: 'L', foot + 4: 'H'}.get(z, '?')
+    near = {(x + a, y + b) for (x, y), (t, _, _) in cells.items() if t in CLIFF for a in (-1, 0, 1) for b in (-1, 0, 1)}
+    bad = collections.Counter()
+    for c in near:
+        if c not in cells:
+            continue
+        for d, (dx, dy) in enumerate(rules['dirs']):
+            n = (c[0] + dx, c[1] + dy)
+            if n in cells and (n in near) and (token(c), token(n)) not in allowed[d]:
+                bad[(token(c), token(n), d)] += 1
+    print('cliff cells', sum(t in CLIFF for t, _, _ in cells.values()), 'foot level', foot,
+          'unseen neighbour pairs', sum(bad.values()), bad.most_common(5))
+    assert not bad, 'cliff pieces next to each other in a way the official maps never do'
+    # flat ground at the foot never touches ground on top (that would be a way up)
+    up = sum(cells[c][2] >= cells[(c[0] + a, c[1] + b)][2] + 3
+             for c in cells if cells[c][0] not in CLIFF for a in (-1, 0, 1) for b in (-1, 0, 1)
+             if (c[0] + a, c[1] + b) in cells and cells[(c[0] + a, c[1] + b)][0] not in CLIFF)
+    print('ground cells 3+ levels above a neighbour outside the cliffs', up)
+    assert up == 0
 # LAT rule
 N4 = [(0,-1),(1,0),(0,1),(-1,0)]
 bad = 0

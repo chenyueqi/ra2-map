@@ -11,7 +11,7 @@
 | [huaihai.mpr](huaihai.mpr) | 淮海战役 (1948-49) | 雪地 | 商丘、陈官庄、徐州、碾庄、新安镇、宿县、双堆集、蚌埠 |
 | [kursk.mpr](kursk.mpr) | 库尔斯克战役 (1943) | 温带（夏季） | 奥廖尔、波内里、库尔斯克、雷利斯克、旧奥斯科尔、奥博扬、普罗霍罗夫卡、别尔哥罗德 |
 | [hohhot.mpr](hohhot.mpr) | 呼和浩特 | 温带 | |
-| [colorado.mpr](colorado.mpr) | Colorado | 温带 | |
+| [colorado.mpr](colorado.mpr) | Colorado，落基山是悬崖高原，只能走 I-70、北线（Trail Ridge Road）、南线（US-160）三条峡谷过山 | 温带 | 东：Boulder、Colorado Springs、Sterling、Lamar；西：Grand Junction、Durango、Steamboat Springs；圣路易斯谷：Alamosa |
 | [bayarea.mpr](bayarea.mpr) | San Francisco Bay Area | 城市 | |
 
 这些文件由 `python3 gen.py <region>` 生成。
