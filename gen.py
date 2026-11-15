@@ -313,7 +313,28 @@ def on_map(c):
     return 0 <= c[0] < N and 0 <= c[1] < N and VALID[c]
 
 
-def plan_bridge(name, lon, lat, max_len=60):
+def long_way_round(p, q):
+    """With BRIDGE_DETOUR set, a river that ends inland may still be bridged: the walk between the two ends over dry
+    land must be longer than BRIDGE_DETOUR cells (otherwise the deck would only span a bay or a bend)."""
+    limit = getattr(cfg, 'BRIDGE_DETOUR', None)
+    if limit is None:
+        return False
+    seen, frontier = {p}, [p]
+    for _ in range(limit):
+        nxt = []
+        for x, y in frontier:
+            for c in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if c not in seen and on_map(c) and not (water_cell[c] or high[c] or cliff_cell[c]):
+                    if c == q:
+                        return False
+                    seen.add(c)
+                    nxt.append(c)
+        frontier = nxt
+    return True
+
+
+def plan_bridge(name, lon, lat, max_len=None):
+    max_len = max_len or getattr(cfg, 'BRIDGE_MAX_LEN', 60)
     global bank
     if bank is None:                    # land masses before any bridge: a bridge must join two of them
         bank, _ = components(VALID & ~water_cell)
@@ -321,7 +342,7 @@ def plan_bridge(name, lon, lat, max_len=60):
     seeds = sorted(((x, y) for x in range(int(rx) - 6, int(rx) + 7) for y in range(int(ry) - 6, int(ry) + 7)
                     if water_cell[x, y]), key=lambda c: math.hypot(c[0] + 0.5 - rx, c[1] + 0.5 - ry))
     best = None
-    for sx, sy in seeds[:20]:
+    for sx, sy in seeds[:getattr(cfg, 'BRIDGE_SEEDS', 20)]:
         for axis in (0, 1):
             def cell(t, k, sx=sx, sy=sy, axis=axis):
                 return (sx + t, sy + k) if axis == 0 else (sx + k, sy + t)
@@ -341,7 +362,7 @@ def plan_bridge(name, lon, lat, max_len=60):
                    for k in (-1, 0, 1)]
             if not all(on_map(c) and in_local(*c, 2) for c in ends + dry) or any(water_cell[c] for c in dry):
                 continue
-            if bank[cell(a, 0)] == bank[cell(b, 0)]:
+            if bank[cell(a, 0)] == bank[cell(b, 0)] and not long_way_round(cell(a, 0), cell(b, 0)):
                 continue                  # both ends on the same bank: it would only span a bay or a bend
             if any(bridge_reserved[cell(t, k)] for t in range(a - 1, b + 2) for k in (-2, -1, 0, 1, 2)):
                 continue                  # keep a lane between neighbouring decks (approaches may share ground)
@@ -613,6 +634,14 @@ for _, lon, lat in cfg.ORE_TOWNS:
 for _, lon, lat in cfg.GEM_TOWNS:
     place_field(*to_iso(lon, lat), 2.0, 'gem')
 
+# walls: a region's walls(g) gives cells for a wall overlay (WALL_OVERLAY, 0 = the sandbag line of the official maps);
+# each cell's data is the mask of its wall neighbours (1 = ry-1, 2 = rx+1, 4 = ry+1, 8 = rx-1), as in the official maps
+wall_cell = np.zeros((N, N), bool)
+if hasattr(cfg, 'walls'):
+    wall_cell = cfg.walls(g) & VALID & flat & ~water_cell & ~taken & (overlay == 255)
+    overlay[wall_cell] = getattr(cfg, 'WALL_OVERLAY', 0)
+    taken |= wall_cell
+
 # --- structures (neutral tech) ----------------------------------------------------------
 structures = []
 
@@ -726,10 +755,12 @@ for cx, cy, kind in fields:
 
 # ore density: fuller in the middle of a field, as FinalAlert does it
 odata = np.zeros((N, N), int)
-has = (overlay != 255) & ~bridge_cell
+has = (overlay != 255) & ~bridge_cell & ~wall_cell
 cnt = sum(shift(has.astype(int), dx, dy, 0) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy)
 odata[has] = np.clip(cnt[has] + 3, 3, 11)
 odata[bridge_cell] = bridge_data[bridge_cell]
+for _bit, (_dx, _dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+    odata[wall_cell] |= (shift(wall_cell, _dx, _dy, False)[wall_cell]) << _bit
 
 # --- trees ------------------------------------------------------------------------------
 p = tree_p.copy()
@@ -785,6 +816,8 @@ def cell_color(rx, ry):
     col = hexrgb(TS[int(tile[rx, ry])]['tiles'][int(sub[rx, ry])]['color'])
     if bridge_cell[rx, ry]:
         col = hexrgb('9A968C')
+    elif wall_cell[rx, ry]:
+        col = hexrgb('B8AE96')
     elif overlay[rx, ry] != 255:
         col = hexrgb('8C7AE6') if overlay[rx, ry] < 100 else hexrgb('D9B13B')
     elif (ry * 1000 + rx) in terrain:
@@ -891,7 +924,9 @@ def report():
     print('ramps', int((VALID & (ramp > 0)).sum()), 'flat', int(flat.sum()), 'water+shore', int((water_cell & VALID).sum()),
           'cliff', int(cliff_cell.sum()), 'plateau', int(high.sum()))
     print('trees', len(terrain), 'ore cells', int(((overlay >= 100) & (overlay != 255)).sum()),
-          'gem cells', int(((overlay < 100) & ~bridge_cell).sum()), 'structures', len(structures))
+          'gem cells', int(((overlay < 100) & ~bridge_cell & ~wall_cell).sum()), 'structures', len(structures))
+    if wall_cell.any():
+        print('  wall cells', int(wall_cell.sum()))
     if RAILWAYS:
         print('  railway cells', int((rail & ~track).sum()), 'on slopes', int((rail & ~track & ~flat).sum()), 'poles', len(poles))
     if TRACKS:

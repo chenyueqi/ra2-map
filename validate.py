@@ -85,6 +85,9 @@ for i, b in enumerate(ov):
         assert (x, y) in cells and cells[(x, y)][0] not in range(29, 49), (x, y)
         if 74 <= b <= 98:                      # low bridge: data is the cell's place across the 3-wide deck
             assert od[i] <= 2 and b in (74, 75, 76, 77, 83, 84, 85, 86, 92, 94, 96, 98), (x, y, b)
+        elif b == 0:                           # sandbag wall: data is the mask of its wall neighbours (as FA2 writes it)
+            mask = sum((ov[(x + dx) + 512 * (y + dy)] == 0) << k for k, (dx, dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))))
+            assert od[i] == mask, (x, y, od[i], mask)
         else:
             assert 1 <= od[i] <= 11
         ovc[b] += 1

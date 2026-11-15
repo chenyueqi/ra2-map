@@ -42,11 +42,15 @@ for rx, ry in cells:
     shade = 1.0 + 0.16 * ((c[2] + c[1]) - (c[0] + c[3])) + 0.025 * level[rx, ry]
     if 'bridge' in st and st['bridge'][rx, ry]:
         col = np.array([150, 146, 136.])
+    elif overlay[rx, ry] == 0:                          # sandbag wall
+        col = np.array([196, 178, 128.])
     elif overlay[rx, ry] != 255:
         col = np.array([140, 122, 230.]) if overlay[rx, ry] < 100 else np.array([222, 180, 50.])
     col = tuple(int(v) for v in np.clip(col * shade, 0, 255))
     poly = [pt(rx, ry, c[0]), pt(rx + 1, ry, c[1]), pt(rx + 1, ry + 1, c[2]), pt(rx, ry + 1, c[3])]
     d.polygon(poly, fill=col)
+    if overlay[rx, ry] == 0:                            # a low wall standing on the cell
+        d.polygon([(x, y - S * 0.6) for x, y in poly], fill=col, outline=(110, 95, 60))
     for (dx, dy), (a, b), dark in (((1, 0), (1, 2), 0.55), ((0, 1), (2, 3), 0.75)):   # rock face down to a lower cell
         nb = (rx + dx, ry + dy)
         if nb[0] < N and nb[1] < N and valid[nb]:
